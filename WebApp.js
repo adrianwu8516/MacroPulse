@@ -153,3 +153,14 @@ function getStatusForDashboard() {
     recentLogs: logs.slice(-10)
   };
 }
+
+function getSocialForDashboard() {
+  var posts = readSheet_(CONFIG.SHEET_SOCIAL_POSTS);
+  var accounts = readSheet_(CONFIG.SHEET_SOCIAL_ACCOUNTS);
+  posts.forEach(function(p) {
+    p.likeCount   = parseInt(p.likeCount)   || 0;
+    p.replyCount  = parseInt(p.replyCount)  || 0;
+    p.repostCount = parseInt(p.repostCount) || 0;
+  });
+  return { posts: posts, accounts: accounts };
+}
