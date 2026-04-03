@@ -2,8 +2,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var dataManager: DataManager
+    @EnvironmentObject var socialFeedManager: SocialFeedManager
     @State private var fredKey: String = ""
     @State private var avKey: String = ""
+    @State private var xToken: String = ""
+    @State private var threadsToken: String = ""
     @State private var showSaved = false
 
     var body: some View {
@@ -56,14 +59,69 @@ struct SettingsView: View {
                     .padding(.vertical, 4)
                 }
 
+                // 社交追踪 API
+                Divider()
+                Text("社交动态追踪")
+                    .font(.title2.bold())
+
+                // X Bearer Token
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("X (Twitter) Bearer Token（选填）", systemImage: "bubble.left.and.text.bubble.right")
+                            .font(.headline)
+
+                        Text("用于读取追踪帐号的推文。需要 Basic 方案 ($200/月)。\n申请地址：developer.x.com")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        SecureField("输入你的 X Bearer Token", text: $xToken)
+                            .textFieldStyle(.roundedBorder)
+
+                        if socialFeedManager.hasXToken {
+                            Label("已设置", systemImage: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                // Threads Access Token
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label("Threads Access Token（选填）", systemImage: "at")
+                            .font(.headline)
+
+                        Text("用于读取 Threads 帖文。免费，需 Meta 开发者帐号。\n申请地址：developers.facebook.com")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        SecureField("输入你的 Threads Access Token", text: $threadsToken)
+                            .textFieldStyle(.roundedBorder)
+
+                        if socialFeedManager.hasThreadsToken {
+                            Label("已设置", systemImage: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.caption)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
                 // 保存按钮
                 HStack {
-                    Button("保存 API Keys") {
+                    Button("保存所有设置") {
                         if !fredKey.isEmpty {
                             dataManager.fredAPIKey = fredKey.trimmingCharacters(in: .whitespaces)
                         }
                         if !avKey.isEmpty {
                             dataManager.alphaVantageAPIKey = avKey.trimmingCharacters(in: .whitespaces)
+                        }
+                        if !xToken.isEmpty {
+                            socialFeedManager.xBearerToken = xToken.trimmingCharacters(in: .whitespaces)
+                        }
+                        if !threadsToken.isEmpty {
+                            socialFeedManager.threadsAccessToken = threadsToken.trimmingCharacters(in: .whitespaces)
                         }
                         showSaved = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -118,6 +176,8 @@ struct SettingsView: View {
         .onAppear {
             fredKey = dataManager.fredAPIKey
             avKey = dataManager.alphaVantageAPIKey
+            xToken = socialFeedManager.xBearerToken
+            threadsToken = socialFeedManager.threadsAccessToken
         }
     }
 

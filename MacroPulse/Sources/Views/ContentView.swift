@@ -6,6 +6,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case monetary = "货币与利率"
     case economy = "经济基本面"
     case sentiment = "市场情绪"
+    case socialFeed = "社交追踪"
     case settings = "设置"
 
     var id: String { rawValue }
@@ -17,6 +18,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .monetary: return "dollarsign.circle"
         case .economy: return "chart.bar"
         case .sentiment: return "heart.text.square"
+        case .socialFeed: return "person.2.wave.2"
         case .settings: return "gearshape"
         }
     }
@@ -47,6 +49,8 @@ struct ContentView: View {
                     CategoryDetailView(category: .economy)
                 case .sentiment:
                     CategoryDetailView(category: .sentiment)
+                case .socialFeed:
+                    SocialFeedView()
                 case .settings:
                     SettingsView()
                 }
