@@ -11,6 +11,7 @@ var CONFIG = {
   SHEET_HISTORY:         'History',
   SHEET_SOCIAL_POSTS:    'SocialPosts',
   SHEET_SOCIAL_ACCOUNTS: 'SocialAccounts',
+  SHEET_HOLDINGS:        'Holdings',
   SHEET_LOG:             'Log',
 
   // API Keys
@@ -19,6 +20,11 @@ var CONFIG = {
   getXToken:        function() { return PROPS_.getProperty('X_BEARER_TOKEN') || ''; },
   getThreadsToken:  function() { return PROPS_.getProperty('THREADS_ACCESS_TOKEN') || ''; },
   getWebAppToken:   function() { return PROPS_.getProperty('WEBAPP_TOKEN') || ''; },
+
+  // Plaid
+  getPlaidClientId: function() { return PROPS_.getProperty('PLAID_CLIENT_ID') || ''; },
+  getPlaidSecret:   function() { return PROPS_.getProperty('PLAID_SECRET') || ''; },
+  getPlaidEnv:      function() { return PROPS_.getProperty('PLAID_ENV') || 'production'; },
 
   // FRED API
   FRED_BASE_URL: 'https://api.stlouisfed.org/fred/series/observations',

@@ -51,7 +51,7 @@ function listTriggers() {
 }
 
 /**
- * 每日綜合抓取：FRED + 情緒指標
+ * 每日綜合抓取：FRED + 情緒指標 + Plaid 持仓
  */
 function dailyDataFetch() {
   log_('Setup', 'dailyDataFetch started');
@@ -68,6 +68,14 @@ function dailyDataFetch() {
     fetchSentimentData();
   } catch (e) {
     log_('Setup', 'fetchSentimentData failed: ' + e.message);
+  }
+
+  Utilities.sleep(1000);
+
+  try {
+    fetchPlaidHoldings();
+  } catch (e) {
+    log_('Setup', 'fetchPlaidHoldings failed: ' + e.message);
   }
 
   log_('Setup', 'dailyDataFetch completed');
@@ -151,6 +159,16 @@ function initializeSheets() {
     saSheet.getRange(1, 1, 1, 5).setValues([
       ['platform', 'username', 'displayName', 'bio', 'userId']
     ]);
+  }
+
+  // Holdings
+  var holdSheet = getOrCreateSheet_(CONFIG.SHEET_HOLDINGS);
+  if (holdSheet.getLastRow() === 0) {
+    holdSheet.getRange(1, 1, 1, 13).setValues([[
+      'date', 'account_id', 'account_name', 'ticker', 'security_name',
+      'type', 'quantity', 'close_price', 'cost_basis',
+      'market_value', 'unrealized_pnl', 'unrealized_pnl_pct', 'currency'
+    ]]);
   }
 
   // Log

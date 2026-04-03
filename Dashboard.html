@@ -220,6 +220,39 @@
     .soc-text   { font-size: .83em; line-height: 1.55; color: var(--text); margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
     .soc-stats  { display: flex; gap: 16px; font-size: .75em; color: var(--muted); }
 
+    /* ── HOLDINGS ────────────────────────────── */
+    .portfolio-summary {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden; margin-bottom: 14px;
+    }
+    .port-cell { background: var(--bg2); padding: 14px 18px; }
+    .port-label { font-size: .72em; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 4px; }
+    .port-val   { font-size: 1.3em; font-weight: 700; }
+
+    .holdings-tbl { width: 100%; border-collapse: collapse; font-size: .82em; margin-bottom: 28px; }
+    .holdings-tbl th, .holdings-tbl td { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+    .holdings-tbl th { color: var(--muted); font-weight: 500; background: var(--bg2); }
+    .holdings-tbl tr:hover td { background: #1a1f27; }
+    .holdings-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ticker-badge { font-weight: 700; color: var(--blue); }
+    .type-tag { padding: 2px 7px; border-radius: 4px; background: var(--bg3); color: var(--muted); font-size: .8em; }
+
+    .plaid-cta {
+      background: var(--bg2); border: 1px dashed var(--border);
+      border-radius: 10px; padding: 32px; text-align: center; margin-bottom: 28px;
+    }
+    .plaid-cta h3 { font-size: .95em; margin-bottom: 8px; }
+    .plaid-cta p  { font-size: .83em; color: var(--muted); margin-bottom: 18px; }
+    .plaid-btn {
+      display: inline-block; padding: 9px 22px;
+      background: var(--blue); color: #fff; border-radius: 7px;
+      font-size: .88em; font-weight: 600; text-decoration: none;
+      transition: opacity .2s;
+    }
+    .plaid-btn:hover { opacity: .82; }
+
     /* ── LOG TABLE ───────────────────────────── */
     .log-tbl { width: 100%; border-collapse: collapse; font-size: .8em; }
     .log-tbl th, .log-tbl td { padding: 7px 12px; border-bottom: 1px solid var(--border); text-align: left; }
@@ -315,6 +348,21 @@
   <div class="sec-title">S&amp;P 500 / SPY</div>
   <div class="sp500-wrap" id="sp500-wrap">
     <div class="sp500-card skeleton" style="height:100px"></div>
+  </div>
+
+  <!-- HOLDINGS -->
+  <div id="holdings-sec">
+    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Portfolio Holdings</span>
+      <span id="holdings-setup-link" style="display:none">
+        <a id="plaid-link" href="#" style="font-size:.8em;color:var(--blue);text-decoration:none">
+          + Connect Plaid
+        </a>
+      </span>
+    </div>
+    <div id="holdings-body">
+      <div class="ind-card c-dim skeleton" style="height:80px;margin-bottom:12px"></div>
+    </div>
   </div>
 
   <!-- SOCIAL -->
@@ -679,6 +727,116 @@ function renderStatus(result) {
 }
 
 // ═══════════════════════════════════════════════
+// RENDER HOLDINGS
+// ═══════════════════════════════════════════════
+function renderHoldings(result) {
+  var wrap = document.getElementById('holdings-body');
+  var holdings    = result.holdings    || [];
+  var isConnected = result.isConnected;
+
+  // Show "Connect Plaid" link in section title if not connected
+  if (!isConnected || !holdings.length) {
+    // Show the link to setup page
+    google.script.run
+      .withSuccessHandler(function(url) {
+        var linkEl = document.getElementById('plaid-link');
+        linkEl.href = url + '?page=plaid-setup';
+        document.getElementById('holdings-setup-link').style.display = 'inline';
+      })
+      .withFailureHandler(function(){})
+      .getWebAppUrl();
+  }
+
+  if (!isConnected) {
+    wrap.innerHTML =
+      '<div class="plaid-cta">' +
+        '<h3>📊 Portfolio Tracking Not Connected</h3>' +
+        '<p>Connect your Firstrade account via Plaid to track your holdings directly in this dashboard.</p>' +
+        '<a id="plaid-cta-btn" href="#" class="plaid-btn">Connect Firstrade via Plaid</a>' +
+      '</div>';
+    google.script.run
+      .withSuccessHandler(function(url) {
+        var btn = document.getElementById('plaid-cta-btn');
+        if (btn) btn.href = url + '?page=plaid-setup';
+      })
+      .withFailureHandler(function(){})
+      .getWebAppUrl();
+    return;
+  }
+
+  if (!holdings.length) {
+    wrap.innerHTML =
+      '<div class="plaid-cta">' +
+        '<h3>✅ Plaid Connected</h3>' +
+        '<p>No holdings data yet. The daily fetch runs at 06:00 GMT+8, or run <code>fetchPlaidHoldings()</code> in the GAS editor to fetch immediately.</p>' +
+      '</div>';
+    return;
+  }
+
+  // Portfolio summary
+  var totalVal   = result.totalValue;
+  var totalPnl   = result.totalPnl;
+  var pnlPct     = (totalPnl !== null && totalVal) ? (totalPnl / (totalVal - totalPnl) * 100) : null;
+  var pnlColor   = totalPnl !== null ? (totalPnl >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--text)';
+  var pnlSign    = totalPnl !== null ? (totalPnl >= 0 ? '+' : '') : '';
+
+  var summary =
+    '<div class="portfolio-summary">' +
+      cell_('Total Value',  '$' + fmt_(totalVal), totalVal > 0 ? 'var(--text)' : 'var(--muted)') +
+      (totalPnl !== null ? cell_('Unrealized P&L', pnlSign + '$' + fmt_(totalPnl) + (pnlPct !== null ? ' (' + pnlSign + pnlPct.toFixed(2) + '%)' : ''), pnlColor) : '') +
+      cell_('Positions', holdings.length + ' holdings', 'var(--blue)') +
+      cell_('Last Update', holdings[0] ? String(holdings[0].date) : '—', 'var(--muted)') +
+    '</div>';
+
+  function cell_(label, val, color) {
+    return '<div class="port-cell"><div class="port-label">'+label+'</div>'+
+      '<div class="port-val" style="color:'+color+'">'+esc(String(val))+'</div></div>';
+  }
+
+  // Holdings table
+  var rows = holdings.map(function(h) {
+    var pnlCell = '';
+    if (h.unrealized_pnl !== null) {
+      var c = h.unrealized_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+      var s = h.unrealized_pnl >= 0 ? '+' : '';
+      pnlCell = '<span style="color:'+c+'">'+s+'$'+fmt_(h.unrealized_pnl)+'</span>';
+      if (h.unrealized_pnl_pct !== null) {
+        pnlCell += ' <span style="color:'+c+';font-size:.85em">('+s+h.unrealized_pnl_pct.toFixed(2)+'%)</span>';
+      }
+    } else {
+      pnlCell = '<span style="color:var(--muted)">—</span>';
+    }
+
+    return '<tr>' +
+      '<td><span class="ticker-badge">'+esc(h.ticker||'—')+'</span></td>' +
+      '<td>'+esc(h.security_name||'')+'</td>' +
+      '<td><span class="type-tag">'+esc(h.type||'')+'</span></td>' +
+      '<td class="num">'+fmt4_(h.quantity)+'</td>' +
+      '<td class="num">$'+fmt_(h.close_price)+'</td>' +
+      '<td class="num" style="font-weight:600">$'+fmt_(h.market_value)+'</td>' +
+      '<td class="num">'+pnlCell+'</td>' +
+      '</tr>';
+  }).join('');
+
+  var table =
+    '<table class="holdings-tbl">' +
+      '<thead><tr>' +
+        '<th>Ticker</th><th>Name</th><th>Type</th>' +
+        '<th style="text-align:right">Qty</th>' +
+        '<th style="text-align:right">Price</th>' +
+        '<th style="text-align:right">Mkt Value</th>' +
+        '<th style="text-align:right">Unrealized P&amp;L</th>' +
+      '</tr></thead>' +
+      '<tbody>'+rows+'</tbody>' +
+    '</table>';
+
+  wrap.innerHTML = summary + table;
+}
+
+function fmt_(v)  { if (!v && v !== 0) return '—'; return Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmt4_(v) { if (!v && v !== 0) return '—'; return Number(v).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:4}); }
+
+// ═══════════════════════════════════════════════
 // RENDER SOCIAL
 // ═══════════════════════════════════════════════
 function renderSocial(result) {
@@ -743,6 +901,14 @@ function loadAll() {
     .withSuccessHandler(renderSocial)
     .withFailureHandler(function(){})
     .getSocialForDashboard();
+
+  google.script.run
+    .withSuccessHandler(renderHoldings)
+    .withFailureHandler(function(e) {
+      document.getElementById('holdings-body').innerHTML =
+        '<div style="color:var(--muted);padding:16px;font-size:.85em">Could not load holdings: ' + esc(e.message) + '</div>';
+    })
+    .getHoldingsForDashboard();
 }
 
 loadAll();

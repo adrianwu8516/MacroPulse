@@ -9,8 +9,14 @@ function doGet(e) {
   var params = e.parameter || {};
   var action = params.action || '';
 
-  // 沒有 action → 回傳 HTML Dashboard（瀏覽器直接開）
+  // 沒有 action → 依 page 參數路由到對應 HTML
   if (!action) {
+    var page = params.page || 'dashboard';
+    if (page === 'plaid-setup') {
+      return HtmlService.createHtmlOutputFromFile('PlaidLink')
+        .setTitle('Connect Plaid — MacroPulse')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    }
     return HtmlService.createHtmlOutputFromFile('Dashboard')
       .setTitle('MacroPulse Dashboard')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -163,4 +169,11 @@ function getSocialForDashboard() {
     p.repostCount = parseInt(p.repostCount) || 0;
   });
   return { posts: posts, accounts: accounts };
+}
+
+/**
+ * 回傳 Web App 自身 URL（供前端 PlaidLink.html 用來導回 Dashboard）
+ */
+function getWebAppUrl() {
+  return ScriptApp.getService().getUrl();
 }

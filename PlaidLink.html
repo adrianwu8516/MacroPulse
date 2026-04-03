@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connect Plaid — MacroPulse</title>
+  <style>
+    :root {
+      --bg:    #0d1117; --bg2: #161b22; --border: #30363d;
+      --text:  #e6edf3; --muted: #8b949e;
+      --green: #3fb950; --red: #f85149; --blue: #58a6ff;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 14px; padding: 40px 36px; max-width: 480px; width: 100%;
+      text-align: center;
+    }
+    .logo { font-size: 1.5em; font-weight: 700; letter-spacing: 1.5px; margin-bottom: 6px;
+      background: linear-gradient(135deg, #58a6ff, #3fb950);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { font-size: .85em; color: var(--muted); margin-bottom: 32px; }
+
+    .status-icon { font-size: 3em; margin-bottom: 16px; }
+    h2 { font-size: 1.15em; margin-bottom: 10px; }
+    p  { font-size: .88em; color: var(--muted); line-height: 1.6; margin-bottom: 24px; }
+
+    .btn {
+      display: inline-block; padding: 12px 28px; border-radius: 8px;
+      font-size: .95em; font-weight: 600; cursor: pointer;
+      border: none; transition: opacity .2s; width: 100%; max-width: 280px;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: .85; }
+    .btn-danger  { background: transparent; color: var(--red); border: 1px solid var(--red); margin-top: 12px; }
+    .btn-danger:hover:not(:disabled) { background: #4a1c1a; }
+    .btn-back    { background: transparent; color: var(--muted); border: 1px solid var(--border); margin-top: 12px; }
+    .btn-back:hover { color: var(--text); }
+
+    .steps { text-align: left; background: #0d1117; border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px; margin-bottom: 28px; }
+    .step { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 12px; font-size: .84em; }
+    .step:last-child { margin-bottom: 0; }
+    .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--blue);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-size: .75em; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+    .step-text { color: var(--muted); line-height: 1.5; }
+
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border);
+      border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite;
+      vertical-align: middle; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .connected-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #1a4731; border: 1px solid var(--green); color: var(--green);
+      padding: 6px 14px; border-radius: 20px; font-size: .82em; font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .msg { margin-top: 16px; font-size: .84em; padding: 10px 14px; border-radius: 6px; }
+    .msg-ok  { background: #1a4731; color: var(--green); border: 1px solid var(--green); }
+    .msg-err { background: #4a1c1a; color: var(--red);   border: 1px solid var(--red); }
+    .hidden  { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">MacroPulse</div>
+  <div class="subtitle">Plaid Brokerage Connection</div>
+
+  <!-- State: Loading -->
+  <div id="view-loading">
+    <div class="status-icon">⏳</div>
+    <h2>Checking connection status…</h2>
+    <p><span class="spinner"></span>Please wait</p>
+  </div>
+
+  <!-- State: Not connected -->
+  <div id="view-connect" class="hidden">
+    <div class="status-icon">🔗</div>
+    <h2>Connect Your Firstrade Account</h2>
+    <p>Authorize MacroPulse to read your holdings via Plaid. Your credentials go directly to Plaid — they are never stored here.</p>
+
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-text">Click <strong>Connect via Plaid</strong> below</div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-text">Search for <strong>Firstrade</strong> and log in with your brokerage credentials</div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-text">MacroPulse will automatically fetch your holdings every morning</div></div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-connect" onclick="startLink()">Connect via Plaid</button>
+    <div id="msg-connect" class="msg hidden"></div>
+    <br>
+    <button class="btn btn-back" onclick="goBack()">← Back to Dashboard</button>
+  </div>
+
+  <!-- State: Already connected -->
+  <div id="view-connected" class="hidden">
+    <div class="status-icon">✅</div>
+    <h2>Firstrade Connected</h2>
+    <div class="connected-badge">
+      <span>●</span> Active connection
+    </div>
+    <p>Your holdings are being synced daily. You can disconnect at any time — this will remove your access token from MacroPulse and revoke Plaid access.</p>
+
+    <button class="btn btn-back" onclick="goBack()">← Back to Dashboard</button>
+    <br>
+    <button class="btn btn-danger" id="btn-disconnect" onclick="disconnect()">Disconnect Plaid</button>
+    <div id="msg-connected" class="msg hidden"></div>
+  </div>
+
+  <!-- State: Success after linking -->
+  <div id="view-success" class="hidden">
+    <div class="status-icon">🎉</div>
+    <h2>Successfully Connected!</h2>
+    <p>Your Firstrade account is now linked. Holdings will be fetched automatically every morning at 06:00 (GMT+8).<br><br>
+    You can also run <strong>fetchPlaidHoldings()</strong> manually in the GAS editor to fetch immediately.</p>
+    <button class="btn btn-primary" onclick="goBack()">← Back to Dashboard</button>
+  </div>
+</div>
+
+<!-- Plaid Link SDK -->
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+<script>
+  var plaidHandler = null;
+
+  // ── Init ──────────────────────────────────
+  google.script.run
+    .withSuccessHandler(function(status) {
+      show(status.isConnected ? 'connected' : 'connect');
+    })
+    .withFailureHandler(function(err) {
+      show('connect');
+      showMsg('connect', 'Warning: could not check status — ' + err.message, true);
+    })
+    .getPlaidStatus();
+
+  // ── Start Plaid Link ──────────────────────
+  function startLink() {
+    var btn = document.getElementById('btn-connect');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Initializing…';
+    hideMsg('connect');
+
+    google.script.run
+      .withSuccessHandler(function(linkToken) {
+        plaidHandler = Plaid.create({
+          token: linkToken,
+          onSuccess: function(publicToken, metadata) {
+            btn.innerHTML = '<span class="spinner"></span>Saving access token…';
+            google.script.run
+              .withSuccessHandler(function() {
+                show('success');
+              })
+              .withFailureHandler(function(err) {
+                btn.disabled = false;
+                btn.innerHTML = 'Connect via Plaid';
+                showMsg('connect', 'Error saving token: ' + err.message, true);
+              })
+              .exchangePlaidToken(publicToken);
+          },
+          onExit: function(err) {
+            btn.disabled = false;
+            btn.innerHTML = 'Connect via Plaid';
+            if (err) {
+              showMsg('connect', 'Plaid Link exited: ' + (err.display_message || err.error_message || 'Unknown error'), true);
+            }
+          },
+          onLoad: function() {},
+          onEvent: function() {}
+        });
+        plaidHandler.open();
+      })
+      .withFailureHandler(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = 'Connect via Plaid';
+        showMsg('connect', 'Failed to initialize Plaid: ' + err.message, true);
+      })
+      .createPlaidLinkToken();
+  }
+
+  // ── Disconnect ────────────────────────────
+  function disconnect() {
+    var btn = document.getElementById('btn-disconnect');
+    btn.disabled = true;
+    btn.textContent = 'Disconnecting…';
+
+    google.script.run
+      .withSuccessHandler(function() {
+        showMsg('connected', 'Disconnected successfully. Redirecting…', false);
+        setTimeout(function(){ show('connect'); }, 1500);
+      })
+      .withFailureHandler(function(err) {
+        btn.disabled = false;
+        btn.textContent = 'Disconnect Plaid';
+        showMsg('connected', 'Error: ' + err.message, true);
+      })
+      .disconnectPlaid();
+  }
+
+  // ── Helpers ───────────────────────────────
+  function show(viewName) {
+    ['loading','connect','connected','success'].forEach(function(v){
+      document.getElementById('view-'+v).classList.toggle('hidden', v !== viewName);
+    });
+  }
+  function showMsg(view, text, isError) {
+    var el = document.getElementById('msg-'+view);
+    el.textContent = text;
+    el.className = 'msg ' + (isError ? 'msg-err' : 'msg-ok');
+    el.classList.remove('hidden');
+  }
+  function hideMsg(view) {
+    document.getElementById('msg-'+view).classList.add('hidden');
+  }
+  function goBack() {
+    google.script.run
+      .withSuccessHandler(function(url){ window.location.href = url; })
+      .withFailureHandler(function(){ window.history.back(); })
+      .getWebAppUrl();
+  }
+</script>
+</body>
+</html>
