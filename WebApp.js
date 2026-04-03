@@ -7,15 +7,21 @@
 
 function doGet(e) {
   var params = e.parameter || {};
+  var action = params.action || '';
 
-  // 認證檢查
+  // 沒有 action → 回傳 HTML Dashboard（瀏覽器直接開）
+  if (!action) {
+    return HtmlService.createHtmlOutputFromFile('Dashboard')
+      .setTitle('MacroPulse Dashboard')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  // 有 action → JSON API（需要 token，供 Mac App 使用）
   var token = params.token || '';
   var expected = CONFIG.getWebAppToken();
   if (!expected || token !== expected) {
     return jsonResponse_({ error: 'unauthorized' });
   }
-
-  var action = params.action || 'indicators';
 
   switch (action) {
     case 'indicators':
@@ -122,4 +128,28 @@ function handleStatus_() {
     indicatorCount: indicators.length,
     recentLogs: recentLogs
   });
+}
+
+/**
+ * Dashboard 專用：透過 google.script.run 呼叫，不需要 token
+ */
+function getIndicatorsForDashboard() {
+  var data = readSheet_(CONFIG.SHEET_INDICATORS);
+  data.forEach(function(row) {
+    row.rawValue      = row.rawValue      !== '' ? parseFloat(row.rawValue)      || null : null;
+    row.previousValue = row.previousValue !== '' ? parseFloat(row.previousValue) || null : null;
+  });
+  return { indicators: data };
+}
+
+function getStatusForDashboard() {
+  var indicators = readSheet_(CONFIG.SHEET_INDICATORS);
+  var lastFetch = indicators.length > 0 && indicators[0].timestamp ? indicators[0].timestamp : null;
+  var logs = readSheet_(CONFIG.SHEET_LOG);
+  return {
+    status: 'ok',
+    lastFetch: lastFetch,
+    indicatorCount: indicators.length,
+    recentLogs: logs.slice(-10)
+  };
 }

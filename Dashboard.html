@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MacroPulse Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; padding: 24px; background: #111; color: #eee; }
+    h1 { color: #4fc3f7; margin-bottom: 24px; font-size: 1.6em; letter-spacing: 2px; }
+    h2 { color: #90caf9; margin: 24px 0 10px; font-size: 1.1em; text-transform: uppercase; letter-spacing: 1px; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 8px; font-size: 0.85em; }
+    th, td { border: 1px solid #333; padding: 7px 12px; text-align: left; }
+    th { background: #1e1e1e; color: #aaa; font-weight: normal; }
+    tr:hover td { background: #1a1a2e; }
+    .up   { color: #81c784; }
+    .down { color: #e57373; }
+    .flat { color: #aaa; }
+    .tag  { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 0.8em; background: #263238; color: #80cbc4; }
+    .status-bar { font-size: 0.8em; color: #666; margin-bottom: 20px; }
+    .loading { color: #555; font-style: italic; }
+    #refresh-btn {
+      margin-top: 28px; padding: 8px 18px;
+      background: #1565c0; color: #fff; border: none;
+      cursor: pointer; border-radius: 4px; font-family: monospace; font-size: 0.9em;
+    }
+    #refresh-btn:hover { background: #1976d2; }
+  </style>
+</head>
+<body>
+  <h1>MacroPulse Dashboard</h1>
+  <div class="status-bar" id="status-bar">Loading...</div>
+
+  <h2>Indicators</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Name</th><th>Category</th>
+        <th>Value</th><th>Prev</th><th>Display</th><th>Updated</th>
+      </tr>
+    </thead>
+    <tbody id="indicators-body">
+      <tr><td colspan="7" class="loading">Fetching indicators...</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Recent Logs</h2>
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Module</th><th>Message</th></tr>
+    </thead>
+    <tbody id="log-body">
+      <tr><td colspan="3" class="loading">Fetching logs...</td></tr>
+    </tbody>
+  </table>
+
+  <button id="refresh-btn" onclick="loadAll()">Refresh</button>
+
+  <script>
+    function loadAll() {
+      document.getElementById('status-bar').textContent = 'Loading...';
+      document.getElementById('indicators-body').innerHTML =
+        '<tr><td colspan="7" class="loading">Fetching indicators...</td></tr>';
+      document.getElementById('log-body').innerHTML =
+        '<tr><td colspan="3" class="loading">Fetching logs...</td></tr>';
+
+      google.script.run
+        .withSuccessHandler(renderIndicators)
+        .withFailureHandler(function(err) {
+          document.getElementById('indicators-body').innerHTML =
+            '<tr><td colspan="7" style="color:#e57373">Error: ' + err.message + '</td></tr>';
+        })
+        .getIndicatorsForDashboard();
+
+      google.script.run
+        .withSuccessHandler(renderStatus)
+        .withFailureHandler(function(err) {
+          document.getElementById('log-body').innerHTML =
+            '<tr><td colspan="3" style="color:#e57373">Error: ' + err.message + '</td></tr>';
+        })
+        .getStatusForDashboard();
+    }
+
+    function renderIndicators(result) {
+      var body = document.getElementById('indicators-body');
+      if (!result.indicators || result.indicators.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="loading">No data</td></tr>';
+        return;
+      }
+      body.innerHTML = '';
+      result.indicators.forEach(function(row) {
+        var arrow = '';
+        if (row.rawValue !== null && row.previousValue !== null) {
+          if (row.rawValue > row.previousValue)      arrow = '<span class="up"> ▲</span>';
+          else if (row.rawValue < row.previousValue) arrow = '<span class="down"> ▼</span>';
+          else                                        arrow = '<span class="flat"> —</span>';
+        }
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><b>' + esc(row.id) + '</b></td>' +
+          '<td>' + esc(row.name) + '</td>' +
+          '<td><span class="tag">' + esc(row.category) + '</span></td>' +
+          '<td>' + (row.rawValue !== null ? row.rawValue : '—') + arrow + '</td>' +
+          '<td>' + (row.previousValue !== null ? row.previousValue : '—') + '</td>' +
+          '<td>' + esc(row.displayValue) + '</td>' +
+          '<td>' + esc(String(row.timestamp)) + '</td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function renderStatus(result) {
+      var bar = document.getElementById('status-bar');
+      bar.textContent = 'Status: ' + result.status
+        + ' | Indicators: ' + result.indicatorCount
+        + ' | Last fetch: ' + (result.lastFetch || 'unknown')
+        + ' | Updated: ' + new Date().toLocaleTimeString();
+
+      var body = document.getElementById('log-body');
+      if (!result.recentLogs || result.recentLogs.length === 0) {
+        body.innerHTML = '<tr><td colspan="3" class="loading">No logs</td></tr>';
+        return;
+      }
+      body.innerHTML = '';
+      result.recentLogs.slice().reverse().forEach(function(row) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + esc(String(row.timestamp)) + '</td>' +
+          '<td><span class="tag">' + esc(row.module) + '</span></td>' +
+          '<td>' + esc(row.message) + '</td>';
+        body.appendChild(tr);
+      });
+    }
+
+    function esc(str) {
+      if (str === undefined || str === null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>
