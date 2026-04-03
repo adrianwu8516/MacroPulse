@@ -1,15 +1,5 @@
-# Swift / Xcode
-.build/
-*.xcodeproj
-xcuserdata/
-DerivedData/
-*.swp
+.claspignore
+node_modules/
+dist/
+build/
 .DS_Store
-
-# Pre-compiled binaries
-HelloWorld
-HelloWorld.app/
-MacroPulse/MacroPulse.app/
-
-# Claude Code
-.claude/
