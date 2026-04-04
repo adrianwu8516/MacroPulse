@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MacroPulse</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 /* ── TOKENS ─────────────────────────────────────── */
 :root {
@@ -303,6 +304,68 @@ body {
 .log-tbl tr:hover td{background:var(--bg-hover)}
 .log-tag{padding:2px 7px;border-radius:4px;background:rgba(96,165,250,.1);color:var(--blue);font-size:.85em}
 
+/* ── HISTORY MODAL ───────────────────────────────── */
+.modal-overlay {
+  position:fixed;inset:0;z-index:100;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;opacity:0;pointer-events:none;
+  transition:opacity .2s;
+}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal {
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:16px;width:100%;max-width:720px;
+  max-height:85vh;overflow:hidden;
+  display:flex;flex-direction:column;
+  box-shadow:0 24px 80px rgba(0,0,0,.6);
+}
+.modal-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.modal-title{font-size:1em;font-weight:600}
+.modal-meta {font-size:.78em;color:var(--t2)}
+.modal-close {
+  width:28px;height:28px;border-radius:50%;border:1px solid var(--border);
+  background:transparent;color:var(--t2);cursor:pointer;font-size:1em;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;
+}
+.modal-close:hover{background:var(--bg-hover);color:var(--text)}
+
+.modal-range {
+  display:flex;gap:6px;padding:14px 22px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.range-btn {
+  padding:5px 14px;border-radius:100px;border:1px solid var(--border);
+  background:transparent;color:var(--t2);font-size:.78em;cursor:pointer;transition:all .15s;
+}
+.range-btn.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.range-btn:hover:not(.active){border-color:var(--t3);color:var(--text)}
+
+.modal-stats {
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:1px;background:var(--border);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.stat-cell{background:var(--bg-card);padding:10px 14px}
+.stat-label{font-size:.65em;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:3px}
+.stat-val  {font-size:.95em;font-weight:600;font-variant-numeric:tabular-nums}
+
+.modal-chart-wrap{padding:20px 22px;flex:1;min-height:0;position:relative}
+.modal-chart-wrap canvas{max-height:280px}
+
+.modal-loading{
+  display:flex;align-items:center;justify-content:center;
+  height:200px;color:var(--t2);font-size:.85em;gap:10px;
+}
+.spin{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* make indicator cards clickable */
+.ind-card{cursor:pointer}
+.ind-card:hover{border-color:rgba(96,165,250,.35)}
+
 /* ── SKELETON ────────────────────────────────────── */
 .skel{
   background:linear-gradient(90deg,var(--bg-card) 25%,var(--bg-hover) 50%,var(--bg-card) 75%);
@@ -391,12 +454,6 @@ body {
   </div>
   <div id="holdings-wrap"><div class="skel" style="height:80px;margin-bottom:16px"></div></div>
 
-  <!-- SOCIAL -->
-  <div id="social-sec" style="display:none">
-    <div class="sec">Social Feed</div>
-    <div class="social-grid" id="social-grid"></div>
-  </div>
-
   <!-- LOGS -->
   <div class="sec">System Logs</div>
   <table class="log-tbl">
@@ -405,6 +462,37 @@ body {
   </table>
 
 </div><!-- .main -->
+
+<!-- ── HISTORY MODAL ──────────────────────────────── -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title">—</div>
+        <div class="modal-meta" id="modal-meta">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-range">
+      <button class="range-btn" onclick="setRange(90)"  data-days="90">3M</button>
+      <button class="range-btn active" onclick="setRange(180)" data-days="180">6M</button>
+      <button class="range-btn" onclick="setRange(365)" data-days="365">1Y</button>
+      <button class="range-btn" onclick="setRange(1825)" data-days="1825">5Y</button>
+    </div>
+    <div class="modal-stats" id="modal-stats">
+      <div class="stat-cell"><div class="stat-label">Current</div><div class="stat-val" id="stat-cur">—</div></div>
+      <div class="stat-cell"><div class="stat-label">Period High</div><div class="stat-val" id="stat-hi">—</div></div>
+      <div class="stat-cell"><div class="stat-label">Period Low</div><div class="stat-val" id="stat-lo">—</div></div>
+      <div class="stat-cell"><div class="stat-label">Period Avg</div><div class="stat-val" id="stat-avg">—</div></div>
+    </div>
+    <div class="modal-chart-wrap" id="modal-chart-wrap">
+      <div class="modal-loading" id="modal-loading">
+        <div class="spin"></div> Loading history…
+      </div>
+      <canvas id="hist-chart" style="display:none"></canvas>
+    </div>
+  </div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════════════
@@ -630,6 +718,9 @@ function renderIndicators(result) {
 
     var card=document.createElement('div');
     card.className='ind-card '+cc;
+    card.title='Click to view history';
+    var _id = ind.id;
+    card.onclick = function(){ openHistory(_id); };
     card.innerHTML=
       '<div class="ind-head">'+
         '<span class="ind-name">'+esc(cfg.name)+'</span>'+
@@ -693,7 +784,7 @@ function renderSP500(sp) {
   }
 
   wrap.innerHTML=
-    '<div class="sp500-card '+cls+'">'+
+    '<div class="sp500-card '+cls+'" onclick="openHistory(\'SP500\')" title="Click to view history" style="cursor:pointer">'+
       '<div>'+
         '<div class="sp-ticker">SPY / S&amp;P 500</div>'+
         '<div class="sp-price" style="color:'+(sma?(above?'var(--green)':'var(--red)'):'var(--text)')+'">$'+price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'+
@@ -806,30 +897,170 @@ function renderStatus(result){
 }
 
 // ═══════════════════════════════════════════════════
-// SOCIAL
+// HISTORY MODAL
 // ═══════════════════════════════════════════════════
-function renderSocial(result){
-  var posts=result.posts||[];
-  if(!posts.length) return;
-  document.getElementById('social-sec').style.display='block';
-  var grid=document.getElementById('social-grid');
-  grid.innerHTML='';
-  posts.slice(0,6).forEach(function(p){
-    var avCls=p.platform==='x'?'av-x':'av-t';
-    var avL  =p.platform==='x'?'X':'T';
-    var ts='';
-    try{ts=new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}catch(e){}
-    var c=document.createElement('div');
-    c.className='soc-card';
-    c.innerHTML='<div class="soc-head">'+
-      '<div class="soc-av '+avCls+'">'+avL+'</div>'+
-      '<div><div class="soc-author">'+esc(p.authorDisplayName||p.authorUsername)+'</div>'+
-      '<div class="soc-time">@'+esc(p.authorUsername)+' · '+ts+'</div></div></div>'+
-      '<div class="soc-text">'+esc(p.content)+'</div>'+
-      '<div class="soc-stats"><span>♥ '+(p.likeCount||0)+'</span><span>↩ '+(p.replyCount||0)+'</span><span>⟲ '+(p.repostCount||0)+'</span></div>';
-    grid.appendChild(c);
+var _histChart   = null;
+var _activeId    = null;
+var _activeDays  = 180;
+
+var IND_META = {
+  FEDFUNDS:{ label:'Federal Funds Rate',     unit:'%',    zero:false },
+  T10Y2Y:  { label:'Yield Curve (10Y-2Y)',   unit:'%',    zero:true  },
+  DGS10:   { label:'10-Year Treasury Yield', unit:'%',    zero:false },
+  CPI:     { label:'CPI Inflation (ann.)',   unit:'%',    zero:true  },
+  UNRATE:  { label:'Unemployment Rate',      unit:'%',    zero:false },
+  PMI:     { label:'ISM Manufacturing PMI',  unit:'',     zero:true  },
+  GDP:     { label:'GDP Growth (ann.)',       unit:'%',    zero:true  },
+  VIX:     { label:'VIX Volatility Index',   unit:'',     zero:false },
+  FG:      { label:'Fear & Greed Index',     unit:'/100', zero:false },
+  SP500:   { label:'SPY / S&P 500 Price',    unit:'$',    zero:false }
+};
+
+function openHistory(id) {
+  _activeId   = id;
+  _activeDays = 180;
+
+  var meta = IND_META[id] || { label: id, unit: '', zero: false };
+  document.getElementById('modal-title').textContent = meta.label;
+  document.getElementById('modal-meta').textContent  = '— loading —';
+
+  document.querySelectorAll('.range-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.days == _activeDays);
+  });
+
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('modal-loading').style.display = 'flex';
+  document.getElementById('hist-chart').style.display    = 'none';
+
+  loadHistory(id, _activeDays);
+}
+
+function setRange(days) {
+  _activeDays = days;
+  document.querySelectorAll('.range-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.days == days);
+  });
+  document.getElementById('modal-loading').style.display = 'flex';
+  document.getElementById('hist-chart').style.display    = 'none';
+  loadHistory(_activeId, days);
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+  if (_histChart) { _histChart.destroy(); _histChart = null; }
+}
+
+function loadHistory(id, days) {
+  google.script.run
+    .withSuccessHandler(renderHistoryChart)
+    .withFailureHandler(function(e) {
+      document.getElementById('modal-loading').textContent = 'Error: ' + esc(e.message);
+    })
+    .getIndicatorHistory(id, days);
+}
+
+function renderHistoryChart(data) {
+  var dates  = data.dates  || [];
+  var values = data.values || [];
+  if (!dates.length) {
+    document.getElementById('modal-loading').textContent = 'No history data available yet. Run fetchHistoricalData() in the GAS editor first.';
+    return;
+  }
+
+  var meta = IND_META[data.id] || { label: data.id, unit: '', zero: false };
+
+  // Stats
+  var cur = values[values.length - 1];
+  var hi  = Math.max.apply(null, values);
+  var lo  = Math.min.apply(null, values);
+  var avg = values.reduce(function(a,b){return a+b},0) / values.length;
+
+  document.getElementById('modal-meta').textContent  = dates[0] + ' → ' + dates[dates.length-1] + ' (' + dates.length + ' data pts)';
+  document.getElementById('stat-cur').textContent  = meta.unit === '$' ? '$'+fmt(cur) : cur.toFixed(2)+(meta.unit||'');
+  document.getElementById('stat-hi').textContent   = meta.unit === '$' ? '$'+fmt(hi)  : hi.toFixed(2)+(meta.unit||'');
+  document.getElementById('stat-lo').textContent   = meta.unit === '$' ? '$'+fmt(lo)  : lo.toFixed(2)+(meta.unit||'');
+  document.getElementById('stat-avg').textContent  = meta.unit === '$' ? '$'+fmt(avg) : avg.toFixed(2)+(meta.unit||'');
+
+  // Color based on current value vs avg
+  var lineColor = cur >= avg ? '#22c55e' : '#ef4444';
+
+  // Chart
+  document.getElementById('modal-loading').style.display = 'none';
+  var canvas = document.getElementById('hist-chart');
+  canvas.style.display = 'block';
+
+  if (_histChart) _histChart.destroy();
+
+  _histChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: dates,
+      datasets: [{
+        data: values,
+        borderColor: lineColor,
+        backgroundColor: lineColor.replace(')', ', 0.06)').replace('rgb', 'rgba'),
+        borderWidth: 1.5,
+        pointRadius: dates.length > 100 ? 0 : 3,
+        pointHoverRadius: 5,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#161b22',
+          borderColor: '#1d2130',
+          borderWidth: 1,
+          titleColor: '#8892a4',
+          bodyColor: '#edf0f5',
+          callbacks: {
+            label: function(ctx) {
+              var v = ctx.parsed.y;
+              return meta.unit === '$' ? ' $' + fmt(v) : ' ' + v.toFixed(2) + (meta.unit||'');
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255,255,255,.04)' },
+          ticks: {
+            color: '#4b5563', maxTicksLimit: 8, maxRotation: 0,
+            callback: function(val, idx) {
+              var d = this.getLabelForValue(val);
+              return d ? d.substring(0, 7) : '';
+            }
+          }
+        },
+        y: {
+          grid: { color: 'rgba(255,255,255,.04)' },
+          ticks: {
+            color: '#4b5563',
+            callback: function(v) {
+              return meta.unit === '$' ? '$' + v.toFixed(0) : v.toFixed(1) + (meta.unit||'');
+            }
+          },
+          afterDataLimits: meta.zero ? function(axis) {
+            if (axis.min > 0 && axis.max > 0) return;
+            if (axis.max < 0 && axis.min < 0) return;
+            // add zero line reference
+          } : undefined
+        }
+      }
+    }
   });
 }
+
+// Close on Escape
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal({target: document.getElementById('modal-overlay')});
+});
 
 // ═══════════════════════════════════════════════════
 // UTILS
@@ -854,11 +1085,6 @@ function loadAll(){
     .withSuccessHandler(renderStatus)
     .withFailureHandler(function(){})
     .getStatusForDashboard();
-
-  google.script.run
-    .withSuccessHandler(renderSocial)
-    .withFailureHandler(function(){})
-    .getSocialForDashboard();
 
   google.script.run
     .withSuccessHandler(renderHoldings)

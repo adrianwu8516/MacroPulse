@@ -90,6 +90,78 @@ function fetchSMA200_() {
 }
 
 /**
+ * 抓取 SPY 完整歷史日線資料（用於一次性歷史補齊）
+ * 返回 { date: { price, sma200 } } map，僅包含 >= startDate 的日期
+ */
+function fetchSPYHistoryMap_(startDate) {
+  var key = CONFIG.getAVKey();
+  if (!key) throw new Error('ALPHA_VANTAGE_KEY not set');
+
+  var url = CONFIG.AV_BASE_URL +
+    '?function=TIME_SERIES_DAILY_ADJUSTED' +
+    '&symbol=SPY' +
+    '&outputsize=full' +
+    '&apikey=' + key;
+
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) throw new Error('AV history error ' + res.getResponseCode());
+
+  var json = JSON.parse(res.getContentText());
+  var series = json['Time Series (Daily)'];
+  if (!series) throw new Error('AV: no Time Series data in response');
+
+  // 按日期升序排列
+  var dates = Object.keys(series).sort();
+  var priceArr = dates.map(function(d) { return parseFloat(series[d]['5. adjusted close']); });
+
+  // 計算滾動 200-day SMA（O(n) sliding window）
+  var smaArr = new Array(dates.length).fill(null);
+  if (dates.length >= 200) {
+    var windowSum = 0;
+    for (var i = 0; i < 200; i++) windowSum += priceArr[i];
+    smaArr[199] = windowSum / 200;
+    for (var i = 200; i < dates.length; i++) {
+      windowSum += priceArr[i] - priceArr[i - 200];
+      smaArr[i] = windowSum / 200;
+    }
+  }
+
+  var result = {};
+  for (var i = 0; i < dates.length; i++) {
+    var d = dates[i];
+    if (d >= startDate) {
+      result[d] = {
+        price:  Math.round(priceArr[i] * 100) / 100,
+        sma200: smaArr[i] !== null ? Math.round(smaArr[i] * 100) / 100 : ''
+      };
+    }
+  }
+  return result;
+}
+
+/**
+ * 抓取 CNN Fear & Greed 歷史資料（約含過去 1 年）
+ * 返回 { date: score } map
+ */
+function fetchFGHistoryMap_() {
+  var res = UrlFetchApp.fetch(CONFIG.FG_URL, {
+    muteHttpExceptions: true,
+    headers: { 'User-Agent': 'Mozilla/5.0' }
+  });
+  if (res.getResponseCode() !== 200) throw new Error('CNN F&G history error');
+
+  var json = JSON.parse(res.getContentText());
+  var hist = (json.fear_and_greed_historical || {}).data || [];
+  var map = {};
+  hist.forEach(function(pt) {
+    if (!pt.x || !pt.y) return;
+    var d = Utilities.formatDate(new Date(pt.x), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    map[d] = Math.round(pt.y * 10) / 10;
+  });
+  return map;
+}
+
+/**
  * 主要入口：抓取情緒指標，寫入 Indicators sheet
  */
 function fetchSentimentData() {

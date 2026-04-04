@@ -254,19 +254,24 @@ function writeIndicators_(newRows) {
 }
 
 /**
- * 抓取 FRED 歷史數據（用於 History sheet 補齊）
- * @param {string} seriesId
- * @param {number} limit
- * @returns {Object} date string → value 的 map
+ * 抓取 FRED 指定日期範圍的 observations（升序，無筆數限制）
  */
-function fetchFredHistoryMap_(seriesId, limit) {
-  var obs = fetchFredSeries_(seriesId, limit || 90);
-  var map = {};
-  for (var i = 0; i < obs.length; i++) {
-    var val = parseFloat(obs[i].value);
-    if (!isNaN(val)) {
-      map[obs[i].date] = val;
-    }
+function fetchFredSeriesRange_(seriesId, startDate, endDate) {
+  var key = CONFIG.getFredKey();
+  if (!key) throw new Error('FRED_API_KEY not set');
+
+  var url = CONFIG.FRED_BASE_URL +
+    '?series_id=' + seriesId +
+    '&api_key=' + key +
+    '&file_type=json' +
+    '&sort_order=asc' +
+    '&limit=10000' +
+    '&observation_start=' + startDate +
+    (endDate ? '&observation_end=' + endDate : '');
+
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('FRED range error ' + res.getResponseCode() + ' for ' + seriesId);
   }
-  return map;
+  return JSON.parse(res.getContentText()).observations || [];
 }

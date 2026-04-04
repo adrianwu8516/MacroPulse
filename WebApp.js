@@ -160,15 +160,68 @@ function getStatusForDashboard() {
   };
 }
 
-function getSocialForDashboard() {
-  var posts = readSheet_(CONFIG.SHEET_SOCIAL_POSTS);
-  var accounts = readSheet_(CONFIG.SHEET_SOCIAL_ACCOUNTS);
-  posts.forEach(function(p) {
-    p.likeCount   = parseInt(p.likeCount)   || 0;
-    p.replyCount  = parseInt(p.replyCount)  || 0;
-    p.repostCount = parseInt(p.repostCount) || 0;
-  });
-  return { posts: posts, accounts: accounts };
+/**
+ * 回傳某指標的歷史時序數據（供 Dashboard 圖表使用）
+ * @param {string} id   - 指標 ID (FEDFUNDS, VIX, T10Y2Y, ...)
+ * @param {number} days - 回傳天數（預設 365）
+ */
+function getIndicatorHistory(id, days) {
+  var colMap = {
+    'FEDFUNDS': 'FEDFUNDS',
+    'T10Y2Y':   'T10Y2Y',
+    'DGS10':    'DGS10',
+    'CPI':      'CPI_annualized',
+    'UNRATE':   'UNRATE',
+    'PMI':      'PMI',
+    'GDP':      'GDP_growth',
+    'VIX':      'VIX',
+    'FG':       'FG',
+    'SP500':    'SPY_price'
+  };
+
+  var colName = colMap[id];
+  if (!colName) return { dates: [], values: [], id: id };
+
+  var sheet = SS_.getSheetByName(CONFIG.SHEET_HISTORY);
+  if (!sheet) return { dates: [], values: [], id: id };
+
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { dates: [], values: [], id: id };
+
+  var headers = data[0].map(String);
+  var dateIdx = headers.indexOf('date');
+  var colIdx  = headers.indexOf(colName);
+  if (colIdx === -1) return { dates: [], values: [], id: id };
+
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (days || 365));
+
+  var tz = Session.getScriptTimeZone();
+  var points = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var rawDate = data[i][dateIdx];
+    var rawVal  = data[i][colIdx];
+    var numVal  = parseFloat(rawVal);
+    if (isNaN(numVal) || rawVal === '') continue;
+
+    var dt = rawDate instanceof Date ? rawDate : new Date(rawDate);
+    if (isNaN(dt.getTime()) || dt < cutoff) continue;
+
+    points.push({
+      d: Utilities.formatDate(dt, tz, 'yyyy-MM-dd'),
+      v: numVal
+    });
+  }
+
+  points.sort(function(a, b) { return a.d > b.d ? 1 : -1; });
+
+  return {
+    id:     id,
+    days:   days || 365,
+    dates:  points.map(function(p) { return p.d; }),
+    values: points.map(function(p) { return p.v; })
+  };
 }
 
 /**

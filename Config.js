@@ -7,12 +7,10 @@ var SS_ = SpreadsheetApp.getActiveSpreadsheet();
 
 var CONFIG = {
   // Sheet 名稱
-  SHEET_INDICATORS:      'Indicators',
-  SHEET_HISTORY:         'History',
-  SHEET_SOCIAL_POSTS:    'SocialPosts',
-  SHEET_SOCIAL_ACCOUNTS: 'SocialAccounts',
-  SHEET_HOLDINGS:        'Holdings',
-  SHEET_LOG:             'Log',
+  SHEET_INDICATORS: 'Indicators',
+  SHEET_HISTORY:    'History',
+  SHEET_HOLDINGS:   'Holdings',
+  SHEET_LOG:        'Log',
 
   // API Keys
   getFredKey:       function() { return PROPS_.getProperty('FRED_API_KEY') || ''; },

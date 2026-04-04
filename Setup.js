@@ -21,12 +21,6 @@ function setupAllTriggers() {
     .nearMinute(0)
     .create();
 
-  // 每 4 小時抓取社群貼文
-  ScriptApp.newTrigger('fetchAllSocialPosts')
-    .timeBased()
-    .everyHours(4)
-    .create();
-
   // 每日 06:30 (UTC+8) 記錄當日歷史快照
   ScriptApp.newTrigger('appendDailyHistory')
     .timeBased()
@@ -126,6 +120,173 @@ function appendDailyHistory() {
 }
 
 /**
+ * ─────────────────────────────────────────────────────────────────
+ * 一次性歷史數據補齊（在 GAS 編輯器手動執行一次即可）
+ *
+ * 執行後 History sheet 會填入過去 5 年的歷史數據：
+ *   FEDFUNDS / T10Y2Y / DGS10 / CPI / UNRATE / PMI / GDP /
+ *   VIX / Fear&Greed / SPY_price / SPY_sma200
+ *
+ * 之後每天 appendDailyHistory() 自動補上當天數據。
+ * ─────────────────────────────────────────────────────────────────
+ */
+function fetchHistoricalData() {
+  var YEARS = 5;
+  var tz    = Session.getScriptTimeZone();
+
+  var endD   = new Date();
+  var startD = new Date(); startD.setFullYear(startD.getFullYear() - YEARS);
+  // CPI/GDP 需要多抓 1 年以計算成長率
+  var extD   = new Date(); extD.setFullYear(extD.getFullYear() - YEARS - 1);
+
+  var endDate   = Utilities.formatDate(endD,   tz, 'yyyy-MM-dd');
+  var startDate = Utilities.formatDate(startD, tz, 'yyyy-MM-dd');
+  var extDate   = Utilities.formatDate(extD,   tz, 'yyyy-MM-dd');
+
+  log_('Setup', '=== fetchHistoricalData start: ' + startDate + ' ~ ' + endDate + ' ===');
+
+  // histMap[date][col] = value
+  var histMap = {};
+  function put(date, col, val) {
+    if (!histMap[date]) histMap[date] = {};
+    histMap[date][col] = val;
+  }
+
+  // ── FRED: 日線 ──────────────────────────────────────────────────
+  var dailySeries = [
+    { col: 'T10Y2Y', id: 'T10Y2Y'  },
+    { col: 'DGS10',  id: 'DGS10'   },
+    { col: 'VIX',    id: 'VIXCLS'  },
+  ];
+  dailySeries.forEach(function(s) {
+    try {
+      var obs = fetchFredSeriesRange_(s.id, startDate, endDate);
+      obs.forEach(function(o) {
+        var v = parseFloat(o.value);
+        if (!isNaN(v)) put(o.date, s.col, v);
+      });
+      log_('Setup', s.id + ': ' + obs.length + ' obs');
+    } catch(e) { log_('Setup', 'Hist ' + s.id + ': ' + e.message); }
+    Utilities.sleep(250);
+  });
+
+  // ── FRED: 月線 ──────────────────────────────────────────────────
+  var monthlySeries = [
+    { col: 'FEDFUNDS', id: 'FEDFUNDS' },
+    { col: 'UNRATE',   id: 'UNRATE'   },
+    { col: 'PMI',      id: 'NAPM'     },
+  ];
+  monthlySeries.forEach(function(s) {
+    try {
+      var obs = fetchFredSeriesRange_(s.id, startDate, endDate);
+      obs.forEach(function(o) {
+        var v = parseFloat(o.value);
+        if (!isNaN(v)) put(o.date, s.col, v);
+      });
+      log_('Setup', s.id + ': ' + obs.length + ' obs');
+    } catch(e) { log_('Setup', 'Hist ' + s.id + ': ' + e.message); }
+    Utilities.sleep(250);
+  });
+
+  // ── CPI → 年化月度通膨率 ────────────────────────────────────────
+  try {
+    var cpiObs = fetchFredSeriesRange_('CPIAUCSL', extDate, endDate);
+    var prevCPI = null;
+    cpiObs.forEach(function(o) {
+      var v = parseFloat(o.value);
+      if (isNaN(v)) return;
+      if (prevCPI !== null && o.date >= startDate) {
+        put(o.date, 'CPI_annualized', Math.round((v - prevCPI) / prevCPI * 1200 * 100) / 100);
+      }
+      prevCPI = v;
+    });
+    log_('Setup', 'CPI: processed ' + cpiObs.length + ' obs');
+  } catch(e) { log_('Setup', 'Hist CPI: ' + e.message); }
+  Utilities.sleep(250);
+
+  // ── GDP → 季度年化成長率 ────────────────────────────────────────
+  try {
+    var gdpObs = fetchFredSeriesRange_('GDP', extDate, endDate);
+    var prevGDP = null;
+    gdpObs.forEach(function(o) {
+      var v = parseFloat(o.value);
+      if (isNaN(v)) return;
+      if (prevGDP !== null && o.date >= startDate) {
+        put(o.date, 'GDP_growth', Math.round((v - prevGDP) / prevGDP * 400 * 100) / 100);
+      }
+      prevGDP = v;
+    });
+    log_('Setup', 'GDP: processed ' + gdpObs.length + ' obs');
+  } catch(e) { log_('Setup', 'Hist GDP: ' + e.message); }
+  Utilities.sleep(250);
+
+  // ── SPY 歷史日線 + SMA200（Alpha Vantage） ──────────────────────
+  var avKey = CONFIG.getAVKey();
+  if (avKey) {
+    try {
+      var spyMap = fetchSPYHistoryMap_(startDate);
+      Object.keys(spyMap).forEach(function(d) {
+        put(d, 'SPY_price',  spyMap[d].price);
+        if (spyMap[d].sma200 !== '') put(d, 'SPY_sma200', spyMap[d].sma200);
+      });
+      log_('Setup', 'SPY: ' + Object.keys(spyMap).length + ' days');
+      Utilities.sleep(500);
+    } catch(e) { log_('Setup', 'Hist SPY: ' + e.message); }
+  }
+
+  // ── Fear & Greed 歷史（CNN，約 1 年） ───────────────────────────
+  try {
+    var fgMap = fetchFGHistoryMap_();
+    Object.keys(fgMap).forEach(function(d) {
+      if (d >= startDate) put(d, 'FG', fgMap[d]);
+    });
+    log_('Setup', 'F&G: ' + Object.keys(fgMap).length + ' days');
+  } catch(e) { log_('Setup', 'Hist F&G: ' + e.message); }
+
+  // ── 與現有 Sheet 合併，避免覆蓋已有數據 ─────────────────────────
+  var existing = readSheet_(CONFIG.SHEET_HISTORY);
+  existing.forEach(function(row) {
+    var d = row.date instanceof Date
+      ? Utilities.formatDate(row.date, tz, 'yyyy-MM-dd')
+      : String(row.date);
+    if (!d || d < startDate) return;
+    if (!histMap[d]) histMap[d] = {};
+    // 只補空缺，不覆蓋剛抓的新數據
+    var cols = ['FEDFUNDS','T10Y2Y','DGS10','CPI_annualized','UNRATE','PMI','GDP_growth','VIX','FG','SPY_price','SPY_sma200'];
+    cols.forEach(function(c) {
+      if (histMap[d][c] === undefined && row[c] !== '' && row[c] !== undefined) {
+        histMap[d][c] = row[c];
+      }
+    });
+  });
+
+  // ── 寫入 History sheet ──────────────────────────────────────────
+  var headers = ['date','FEDFUNDS','T10Y2Y','DGS10','CPI_annualized','UNRATE','PMI','GDP_growth','VIX','FG','SPY_price','SPY_sma200'];
+  var sortedDates = Object.keys(histMap).filter(function(d){ return d >= startDate; }).sort();
+
+  var rows = sortedDates.map(function(d) {
+    var m = histMap[d];
+    return [
+      d,
+      m.FEDFUNDS      !== undefined ? m.FEDFUNDS      : '',
+      m.T10Y2Y        !== undefined ? m.T10Y2Y        : '',
+      m.DGS10         !== undefined ? m.DGS10         : '',
+      m.CPI_annualized!== undefined ? m.CPI_annualized: '',
+      m.UNRATE        !== undefined ? m.UNRATE        : '',
+      m.PMI           !== undefined ? m.PMI           : '',
+      m.GDP_growth    !== undefined ? m.GDP_growth    : '',
+      m.VIX           !== undefined ? m.VIX           : '',
+      m.FG            !== undefined ? m.FG            : '',
+      m.SPY_price     !== undefined ? m.SPY_price     : '',
+      m.SPY_sma200    !== undefined ? m.SPY_sma200    : ''
+    ];
+  });
+
+  writeSheet_(CONFIG.SHEET_HISTORY, headers, rows);
+  log_('Setup', '=== fetchHistoricalData done: ' + rows.length + ' dates written ===');
+}
+
+/**
  * 初始化 Sheet 結構（首次使用時執行一次）
  */
 function initializeSheets() {
@@ -142,22 +303,6 @@ function initializeSheets() {
   if (histSheet.getLastRow() === 0) {
     histSheet.getRange(1, 1, 1, 12).setValues([
       ['date', 'FEDFUNDS', 'T10Y2Y', 'DGS10', 'CPI_annualized', 'UNRATE', 'PMI', 'GDP_growth', 'VIX', 'FG', 'SPY_price', 'SPY_sma200']
-    ]);
-  }
-
-  // SocialPosts
-  var spSheet = getOrCreateSheet_(CONFIG.SHEET_SOCIAL_POSTS);
-  if (spSheet.getLastRow() === 0) {
-    spSheet.getRange(1, 1, 1, 10).setValues([
-      ['id', 'platform', 'authorUsername', 'authorDisplayName', 'content', 'createdAt', 'likeCount', 'replyCount', 'repostCount', 'url']
-    ]);
-  }
-
-  // SocialAccounts
-  var saSheet = getOrCreateSheet_(CONFIG.SHEET_SOCIAL_ACCOUNTS);
-  if (saSheet.getLastRow() === 0) {
-    saSheet.getRange(1, 1, 1, 5).setValues([
-      ['platform', 'username', 'displayName', 'bio', 'userId']
     ]);
   }
 
