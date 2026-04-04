@@ -73,64 +73,6 @@ function xFetchTweets_(userId, username, maxResults) {
 }
 
 /**
- * Threads API: 抓取用戶貼文（僅限自己的帳號）
- */
-function threadsFetchPosts_(userId, limit) {
-  var token = CONFIG.getThreadsToken();
-  if (!token) throw new Error('THREADS_ACCESS_TOKEN not set');
-
-  var url = CONFIG.THREADS_BASE_URL + '/' + userId + '/threads' +
-    '?fields=id,text,timestamp,like_count,reply_count,repost_count,username' +
-    '&limit=' + Math.min(limit || 10, 25) +
-    '&access_token=' + token;
-
-  var res = UrlFetchApp.fetch(url, {
-    muteHttpExceptions: true
-  });
-
-  var code = res.getResponseCode();
-  if (code === 401 || code === 403) throw new Error('Threads API unauthorized');
-  if (code === 429) throw new Error('Threads API rate limited');
-  if (code !== 200) throw new Error('Threads API error ' + code);
-
-  var json = JSON.parse(res.getContentText());
-  var posts = json.data || [];
-
-  return posts.filter(function(p) { return p.text; }).map(function(post) {
-    return {
-      id: post.id,
-      platform: 'threads',
-      authorUsername: post.username || '',
-      authorDisplayName: '',
-      content: post.text,
-      createdAt: post.timestamp || '',
-      likeCount: post.like_count || 0,
-      replyCount: post.reply_count || 0,
-      repostCount: post.repost_count || 0,
-      url: ''
-    };
-  });
-}
-
-/**
- * Threads API: 取得自己的 profile
- */
-function threadsFetchMyProfile_() {
-  var token = CONFIG.getThreadsToken();
-  if (!token) throw new Error('THREADS_ACCESS_TOKEN not set');
-
-  var url = CONFIG.THREADS_BASE_URL + '/me' +
-    '?fields=id,username,name,threads_biography' +
-    '&access_token=' + token;
-
-  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-  var code = res.getResponseCode();
-  if (code !== 200) throw new Error('Threads me API error ' + code);
-
-  return JSON.parse(res.getContentText());
-}
-
-/**
  * 主要入口：抓取所有追蹤帳號的貼文
  */
 function fetchAllSocialPosts() {
@@ -142,7 +84,6 @@ function fetchAllSocialPosts() {
 
   var allPosts = [];
   var xToken = CONFIG.getXToken();
-  var threadsToken = CONFIG.getThreadsToken();
 
   // 處理 X 帳號
   var xAccounts = accounts.filter(function(a) { return a.platform === 'x'; });
@@ -169,23 +110,6 @@ function fetchAllSocialPosts() {
         Utilities.sleep(1000); // X rate limit
       } catch (e) {
         log_('SocialFetcher', 'X @' + acct.username + ' error: ' + e.message);
-      }
-    }
-  }
-
-  // 處理 Threads 帳號
-  var threadsAccounts = accounts.filter(function(a) { return a.platform === 'threads'; });
-  if (threadsToken && threadsAccounts.length > 0) {
-    for (var j = 0; j < threadsAccounts.length; j++) {
-      var tacct = threadsAccounts[j];
-      try {
-        // Threads API 只能抓自己的貼文，使用 userId 或 'me'
-        var tUserId = tacct.userId || 'me';
-        var posts = threadsFetchPosts_(tUserId, 10);
-        allPosts = allPosts.concat(posts);
-        Utilities.sleep(500);
-      } catch (e) {
-        log_('SocialFetcher', 'Threads @' + tacct.username + ' error: ' + e.message);
       }
     }
   }

@@ -18,7 +18,6 @@ var CONFIG = {
   getFredKey:       function() { return PROPS_.getProperty('FRED_API_KEY') || ''; },
   getAVKey:         function() { return PROPS_.getProperty('ALPHA_VANTAGE_KEY') || ''; },
   getXToken:        function() { return PROPS_.getProperty('X_BEARER_TOKEN') || ''; },
-  getThreadsToken:  function() { return PROPS_.getProperty('THREADS_ACCESS_TOKEN') || ''; },
   getWebAppToken:   function() { return PROPS_.getProperty('WEBAPP_TOKEN') || ''; },
 
   // Plaid
@@ -37,7 +36,4 @@ var CONFIG = {
 
   // X API v2
   X_BASE_URL: 'https://api.x.com/2',
-
-  // Threads API
-  THREADS_BASE_URL: 'https://graph.threads.net/v1.0',
 };
