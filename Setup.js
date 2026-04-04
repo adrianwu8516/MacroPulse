@@ -293,6 +293,104 @@ function fetchHistoricalData() {
 }
 
 /**
+ * Polymarket Schema 遷移 + 全量歷史補全（一次性執行）
+ *
+ * 執行內容：
+ *   1. 重新抓取所有已追蹤市場（取得 clobTokenIds）
+ *   2. 用新 schema 重建 Markets sheet（新增 clobTokenIds, historyBackfilled）
+ *   3. 清空 PriceHistory，用新 per-outcome schema 重建
+ *   4. 對所有市場執行 CLOB 歷史 backfill
+ */
+function migrateAndBackfillPolymarket() {
+  Logger.log('=== migrateAndBackfillPolymarket started ===');
+  polyLog_('migrateAndBackfillPolymarket started');
+
+  var ss      = getPolymarketSS_();
+  var mSheet  = ss.getSheetByName(CONFIG.PM_SHEET_MARKETS);
+  if (!mSheet) { Logger.log('Markets sheet not found'); return; }
+
+  // Step 1: 讀取所有既有市場 ID 和 firstSeenAt
+  var mData    = mSheet.getDataRange().getValues();
+  if (mData.length < 2) { Logger.log('No markets to migrate'); return; }
+
+  var oldHeaders   = mData[0];
+  var midIdx       = oldHeaders.indexOf('marketId');
+  var fstIdx       = oldHeaders.indexOf('firstSeenAt');
+  var staIdx       = oldHeaders.indexOf('trackingStatus');
+  var existingIds  = [];
+  var firstSeenMap = {};
+  var statusMap    = {};
+
+  for (var i = 1; i < mData.length; i++) {
+    var id = String(mData[i][midIdx]);
+    existingIds.push(id);
+    firstSeenMap[id] = mData[i][fstIdx] || '';
+    statusMap[id]    = String(mData[i][staIdx] || 'active');
+  }
+  Logger.log('Found ' + existingIds.length + ' existing markets');
+
+  // Step 2: 從 Gamma API 重新抓取這些市場（取得 clobTokenIds）
+  var refreshed = fetchMarketsById_(existingIds);
+  Logger.log('Re-fetched ' + refreshed.length + ' markets from Gamma API');
+
+  // Step 3: 重建 Markets sheet（新 schema）
+  mSheet.clearContents();
+  mSheet.getRange(1, 1, 1, PM_MARKETS_HEADERS.length).setValues([PM_MARKETS_HEADERS]);
+
+  var now = new Date().toISOString();
+  refreshed.forEach(function(m) {
+    var outcomeType = parseOutcomeType_(m.outcomes);
+    var lead        = calcLeadOutcome_(m.outcomes, m.outcomePrices);
+    var row = PM_MARKETS_HEADERS.map(function(h) {
+      switch (h) {
+        case 'marketId':          return m.id;
+        case 'conditionId':       return m.conditionId;
+        case 'slug':              return m.slug;
+        case 'question':          return m.question;
+        case 'category':          return m.category;
+        case 'tags':              return m.tags;
+        case 'clobTokenIds':      return m.clobTokenIds;
+        case 'outcomeType':       return outcomeType;
+        case 'outcomes':          return m.outcomes;
+        case 'startDate':         return m.startDate;
+        case 'endDate':           return m.endDate;
+        case 'volume':            return m.volume;
+        case 'volume24hr':        return m.volume24hr;
+        case 'liquidity':         return m.liquidity;
+        case 'outcomePrices':     return m.outcomePrices;
+        case 'leadOutcome':       return lead.outcome;
+        case 'leadPrice':         return lead.price;
+        case 'active':            return m.active;
+        case 'closed':            return m.closed;
+        case 'resolved':          return m.resolved;
+        case 'resolvedOutcome':   return '';
+        case 'trackingStatus':    return statusMap[m.id] || 'active';
+        case 'firstSeenAt':       return firstSeenMap[m.id] || now;
+        case 'lastUpdatedAt':     return now;
+        case 'historyBackfilled': return false;
+        default:                  return '';
+      }
+    });
+    mSheet.appendRow(row);
+  });
+  Logger.log('Markets sheet rebuilt with ' + refreshed.length + ' rows + new schema');
+
+  // Step 4: 清空 PriceHistory，用新 schema 重建
+  var phSheet = ss.getSheetByName(CONFIG.PM_SHEET_PRICE_HISTORY);
+  if (!phSheet) phSheet = ss.insertSheet(CONFIG.PM_SHEET_PRICE_HISTORY);
+  phSheet.clearContents();
+  phSheet.getRange(1, 1, 1, PM_PRICE_HISTORY_HEADERS.length).setValues([PM_PRICE_HISTORY_HEADERS]);
+  phSheet.setFrozenRows(1);
+  Logger.log('PriceHistory cleared and re-initialized with per-outcome schema');
+
+  // Step 5: 對所有 active 市場執行 backfill
+  backfillAllTrackedMarkets_();
+
+  Logger.log('=== migrateAndBackfillPolymarket DONE ===');
+  polyLog_('migrateAndBackfillPolymarket completed');
+}
+
+/**
  * Polymarket 一次性初始化（首次使用執行一次）
  * 自動設定 POLYMARKET_SS_ID 並建立 4 個 Sheets
  */

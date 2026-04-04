@@ -228,25 +228,13 @@ function getWebAppUrl() {
 }
 
 /**
- * Polymarket 儀表板資料端點（google.script.run 呼叫，無需 token）
+ * Polymarket 儀表板資料端點（google.script.run，無需 token）
  *
- * 回傳結構：
- * {
- *   markets: [{
- *     marketId, question, category, tags, slug, outcomeType,
- *     outcomes: string[],        // 結果名稱陣列
- *     outcomePrices: number[],   // 對應機率（0–1）
- *     leadOutcome, leadPrice,
- *     volume, volume24hr, liquidity,
- *     endDate, trackingStatus, resolvedOutcome,
- *     recentSnapshots: [{        // 最近快照（供前端繪圖用）
- *       snapshotAt: string,      // ISO timestamp
- *       leadPrice: number,
- *       outcomePrices: string    // 完整 JSON，供 multi-line chart
- *     }]
- *   }],
- *   fetchedAt: string
- * }
+ * PriceHistory 現為 per-outcome long format：
+ *   snapshotAt | marketId | outcomeIndex | outcomeName | price | source
+ *
+ * recentSnapshots 格式（已 group by timestamp）：
+ *   [{ snapshotAt: string, prices: { outcomeName: price } }]
  */
 function getPolymarketsForDashboard() {
   try {
@@ -266,40 +254,46 @@ function getPolymarketsForDashboard() {
       mHeaders.forEach(function(h, j) { row[h] = mData[i][j]; });
       if (String(row.trackingStatus) === 'active') activeMarkets.push(row);
     }
-
-    // 依 volume24hr 降序排列
     activeMarkets.sort(function(a, b) {
       return (parseFloat(b.volume24hr) || 0) - (parseFloat(a.volume24hr) || 0);
     });
 
-    // ── 讀取 PriceHistory（只取最後 N 行，避免全表掃描）──
-    var snapshotsMap = {}; // marketId → [{snapshotAt, leadPrice, outcomePrices}]
+    var activeIdSet = {};
+    activeMarkets.forEach(function(m) { activeIdSet[String(m.marketId)] = true; });
+
+    // ── 讀取 PriceHistory tail（per-outcome long format）────
+    // snapshotAt[0] | marketId[1] | outcomeIndex[2] | outcomeName[3] | price[4] | source[5]
+    // 只讀最後 N 行（tail read），按 marketId+snapshotAt group
+    var snapshotsMap = {}; // marketId → { snapshotAt → { outcomeName: price } }
     var phSheet = ss.getSheetByName(CONFIG.PM_SHEET_PRICE_HISTORY);
     if (phSheet) {
-      var totalRows    = phSheet.getLastRow();
-      var maxToRead    = Math.max(activeMarkets.length * 48, 600); // 最多 48 個快照/市場
-      var startRow     = Math.max(2, totalRows - maxToRead + 1);   // 從第 2 行起（略過 header）
-      var numRows      = totalRows - startRow + 1;
+      var totalRows  = phSheet.getLastRow();
+      // 每個 active 市場保留 60 個時間點 × 平均 2.5 outcomes ≈ 150 行/市場
+      var maxToRead  = Math.max(activeMarkets.length * 150, 1000);
+      var startRow   = Math.max(2, totalRows - maxToRead + 1);
+      var numRows    = totalRows - startRow + 1;
 
       if (numRows > 0) {
-        var phData = phSheet.getRange(startRow, 1, numRows, 7).getValues();
-        // 欄位順序固定：snapshotAt, marketId, volume, volume24hr, liquidity, outcomePrices, leadPrice
+        var phData = phSheet.getRange(startRow, 1, numRows, 6).getValues();
         phData.forEach(function(r) {
-          var mId = String(r[1]);
-          if (!snapshotsMap[mId]) snapshotsMap[mId] = [];
-          snapshotsMap[mId].push({
-            snapshotAt:    String(r[0]),
-            leadPrice:     parseFloat(r[6]) || 0,
-            outcomePrices: String(r[5] || '')
-          });
-        });
-        // 每個市場只保留最後 48 個快照
-        Object.keys(snapshotsMap).forEach(function(id) {
-          if (snapshotsMap[id].length > 48) {
-            snapshotsMap[id] = snapshotsMap[id].slice(-48);
-          }
+          var ts   = String(r[0]);
+          var mId  = String(r[1]);
+          var name = String(r[3]);
+          var p    = parseFloat(r[4]) || 0;
+          if (!activeIdSet[mId]) return; // 只保留 active 市場的資料
+          if (!snapshotsMap[mId]) snapshotsMap[mId] = {};
+          if (!snapshotsMap[mId][ts]) snapshotsMap[mId][ts] = {};
+          snapshotsMap[mId][ts][name] = p;
         });
       }
+    }
+
+    // 將 snapshotsMap 轉為排序的 array，每個市場保留最後 60 個時間點
+    function buildSnapshots(mId) {
+      var tsMap = snapshotsMap[mId] || {};
+      var sorted = Object.keys(tsMap).sort();
+      if (sorted.length > 60) sorted = sorted.slice(-60);
+      return sorted.map(function(ts) { return { snapshotAt: ts, prices: tsMap[ts] }; });
     }
 
     // ── 組裝回傳資料 ─────────────────────────────────
@@ -311,23 +305,23 @@ function getPolymarketsForDashboard() {
                             .map(function(p) { return parseFloat(p) || 0; }); } catch(e) {}
 
       return {
-        marketId:       String(m.marketId),
-        question:       String(m.question),
-        category:       String(m.category || ''),
-        tags:           String(m.tags || ''),
-        slug:           String(m.slug || ''),
-        outcomeType:    String(m.outcomeType || 'binary'),
-        outcomes:       outcomesArr,
-        outcomePrices:  pricesArr,
-        leadOutcome:    String(m.leadOutcome || ''),
-        leadPrice:      parseFloat(m.leadPrice) || 0,
-        volume:         parseFloat(m.volume)     || 0,
-        volume24hr:     parseFloat(m.volume24hr) || 0,
-        liquidity:      parseFloat(m.liquidity)  || 0,
-        endDate:        String(m.endDate || ''),
-        trackingStatus: String(m.trackingStatus || ''),
-        resolvedOutcome:String(m.resolvedOutcome || ''),
-        recentSnapshots: snapshotsMap[String(m.marketId)] || []
+        marketId:        String(m.marketId),
+        question:        String(m.question),
+        category:        String(m.category || ''),
+        tags:            String(m.tags || ''),
+        slug:            String(m.slug || ''),
+        outcomeType:     String(m.outcomeType || 'binary'),
+        outcomes:        outcomesArr,
+        outcomePrices:   pricesArr,
+        leadOutcome:     String(m.leadOutcome || ''),
+        leadPrice:       parseFloat(m.leadPrice) || 0,
+        volume:          parseFloat(m.volume)     || 0,
+        volume24hr:      parseFloat(m.volume24hr) || 0,
+        liquidity:       parseFloat(m.liquidity)  || 0,
+        endDate:         String(m.endDate || ''),
+        trackingStatus:  String(m.trackingStatus || ''),
+        resolvedOutcome: String(m.resolvedOutcome || ''),
+        recentSnapshots: buildSnapshots(String(m.marketId))
       };
     });
 
@@ -336,5 +330,70 @@ function getPolymarketsForDashboard() {
   } catch (e) {
     Logger.log('getPolymarketsForDashboard error: ' + e.message);
     throw new Error('Polymarket data unavailable: ' + e.message);
+  }
+}
+
+/**
+ * Modal 專用：直接打 CLOB API 取得完整歷史（不掃大表）
+ * 回傳：{ marketId, outcomes: { "Yes": [{t,p},...], "No": [...] }, fetchedAt }
+ */
+function getPolymarketHistory(marketId) {
+  try {
+    // 1. 從 Markets sheet 找到此市場的 clobTokenIds 和 outcomes
+    var ss      = getPolymarketSS_();
+    var mSheet  = ss.getSheetByName(CONFIG.PM_SHEET_MARKETS);
+    if (!mSheet) throw new Error('Markets sheet not found');
+
+    var mData   = mSheet.getDataRange().getValues();
+    var headers = mData[0];
+    var midIdx  = headers.indexOf('marketId');
+    var clIdx   = headers.indexOf('clobTokenIds');
+    var outIdx  = headers.indexOf('outcomes');
+
+    var targetRow = null;
+    for (var i = 1; i < mData.length; i++) {
+      if (String(mData[i][midIdx]) === String(marketId)) { targetRow = mData[i]; break; }
+    }
+    if (!targetRow) return { marketId: marketId, outcomes: {}, fetchedAt: new Date().toISOString() };
+
+    var outcomes = [];
+    var tokenIds = [];
+    try { outcomes = JSON.parse(String(targetRow[outIdx] || '[]')); } catch(e) {}
+    try { tokenIds = JSON.parse(String(targetRow[clIdx]  || '[]')); } catch(e) {}
+
+    if (!tokenIds.length) {
+      return { marketId: marketId, outcomes: {}, fetchedAt: new Date().toISOString(),
+               error: 'No clobTokenIds found. Run migrateAndBackfillPolymarket() first.' };
+    }
+
+    // 2. 並行打 CLOB prices-history（interval=max, fidelity=60 → 每小時粒度）
+    var requests = tokenIds.map(function(tokenId) {
+      return {
+        url: 'https://clob.polymarket.com/prices-history?market=' +
+             encodeURIComponent(String(tokenId)) + '&interval=max&fidelity=60',
+        muteHttpExceptions: true
+      };
+    });
+    var responses = UrlFetchApp.fetchAll(requests);
+
+    var outcomeData = {};
+    responses.forEach(function(resp, i) {
+      var name = outcomes[i] || ('Outcome ' + i);
+      if (resp.getResponseCode() !== 200) { outcomeData[name] = []; return; }
+      try {
+        var data    = JSON.parse(resp.getContentText());
+        var history = data.history || data || [];
+        if (!Array.isArray(history)) { outcomeData[name] = []; return; }
+        outcomeData[name] = history.map(function(pt) {
+          return { t: new Date(pt.t * 1000).toISOString(), p: parseFloat(pt.p) || 0 };
+        });
+      } catch (e) { outcomeData[name] = []; }
+    });
+
+    return { marketId: marketId, outcomes: outcomeData, fetchedAt: new Date().toISOString() };
+
+  } catch (e) {
+    Logger.log('getPolymarketHistory error: ' + e.message);
+    throw new Error('History unavailable: ' + e.message);
   }
 }

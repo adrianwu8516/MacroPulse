@@ -1433,6 +1433,7 @@ function buildPmCard(m) {
 
 /**
  * 計算各 outcome 在指定小時數內的機率變化
+ * snapshots 格式：[{ snapshotAt, prices: { outcomeName: price } }]
  * @returns {number[]} 每個 outcome 的機率差值（正 = 上升）
  */
 function computeOutcomeChanges(snapshots, outcomes, hours) {
@@ -1446,20 +1447,19 @@ function computeOutcomeChanges(snapshots, outcomes, hours) {
   }
   if (!first) first = snapshots[0];
   var last = snapshots[snapshots.length - 1];
-  try {
-    var fp = JSON.parse(first.outcomePrices);
-    var lp = JSON.parse(last.outcomePrices);
-    return outcomes.map(function(_, i) {
-      return (parseFloat(lp[i]) || 0) - (parseFloat(fp[i]) || 0);
-    });
-  } catch(e) { return []; }
+  return outcomes.map(function(name) {
+    var fp = (first.prices && first.prices[name] !== undefined) ? first.prices[name] : 0;
+    var lp = (last.prices  && last.prices[name]  !== undefined) ? last.prices[name]  : 0;
+    return lp - fp;
+  });
 }
 
 /**
  * 繪製 multi-line sparkline（每個 outcome 一條線）
+ * snapshots 格式：[{ snapshotAt, prices: { outcomeName: price } }]
  */
 function drawPmSparkline(canvas, snapshots, outcomes) {
-  if (!snapshots || snapshots.length < 2) return;
+  if (!snapshots || snapshots.length < 2 || !outcomes || !outcomes.length) return;
   var ctx = canvas.getContext('2d');
   var w   = canvas.offsetWidth  || canvas.width;
   var h   = canvas.offsetHeight || canvas.height;
@@ -1467,29 +1467,23 @@ function drawPmSparkline(canvas, snapshots, outcomes) {
   canvas.height = h;
   ctx.clearRect(0, 0, w, h);
 
-  var numOutcomes = outcomes ? outcomes.length : 1;
-  var isBinary    = numOutcomes === 2 &&
+  var isBinary  = outcomes.length === 2 &&
     outcomes[0].toLowerCase() === 'yes' && outcomes[1].toLowerCase() === 'no';
+  // Binary: 只畫 Yes（No = 1-Yes，畫兩條沒意義）
+  var drawNames = isBinary ? [outcomes[0]] : outcomes.slice(0, 6);
 
-  // For binary, only draw Yes line
-  var drawCount = isBinary ? 1 : Math.min(numOutcomes, 6);
+  // 從 {snapshotAt, prices:{outcomeName:price}} 格式提取各 outcome 的時間序列
+  var series = drawNames.map(function(name) {
+    return snapshots.map(function(s) {
+      return (s.prices && s.prices[name] !== undefined) ? s.prices[name] : null;
+    }).filter(function(v) { return v !== null; });
+  });
 
-  // Build series per outcome
-  var series = [];
-  for (var oi = 0; oi < drawCount; oi++) {
-    var vals = snapshots.map(function(s) {
-      try {
-        var prices = JSON.parse(s.outcomePrices);
-        return parseFloat(prices[oi]) || 0;
-      } catch(e) { return s.leadPrice || 0; }
-    });
-    series.push(vals);
-  }
-
-  // Global min/max for consistent y-axis
-  var allVals = [].concat.apply([], series);
-  var gMin = Math.min.apply(null, allVals);
-  var gMax = Math.max.apply(null, allVals);
+  // 全局 min/max
+  var allVals = [].concat.apply([], series).filter(function(v) { return v !== null; });
+  if (!allVals.length) return;
+  var gMin   = Math.min.apply(null, allVals);
+  var gMax   = Math.max.apply(null, allVals);
   var gRange = gMax - gMin || 0.02;
 
   var pad = { t: 4, b: 4, l: 2, r: 2 };
@@ -1497,6 +1491,7 @@ function drawPmSparkline(canvas, snapshots, outcomes) {
   var ph  = h - pad.t - pad.b;
 
   series.forEach(function(vals, oi) {
+    if (!vals.length) return;
     ctx.save();
     ctx.strokeStyle = PM_COLORS[oi % PM_COLORS.length];
     ctx.lineWidth   = 1.5;
@@ -1513,6 +1508,8 @@ function drawPmSparkline(canvas, snapshots, outcomes) {
 }
 
 // ─── PM Modal ─────────────────────────────────────
+// History cache: marketId → { outcomes: {name:[{t,p},...]} }
+var _pmHistCache = {};
 
 function openPmModal(m) {
   _pmActiveMarket = m;
@@ -1520,8 +1517,27 @@ function openPmModal(m) {
   document.querySelectorAll('[data-pm-days]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.pmDays === '1');
   });
-  renderPmModal(m);
+  renderPmModalMeta(m); // render header/stats/outcomes table immediately
+  // Show loading for chart
+  document.getElementById('pm-modal-loading').style.display = 'flex';
+  document.getElementById('pm-hist-chart').style.display    = 'none';
   document.getElementById('pm-modal-overlay').classList.add('open');
+
+  // Fetch full CLOB history via GAS
+  if (_pmHistCache[m.marketId]) {
+    renderPmChart(_pmHistCache[m.marketId], m);
+  } else {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        _pmHistCache[m.marketId] = data;
+        renderPmChart(data, m);
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('pm-modal-loading').innerHTML =
+          '<div style="color:var(--red);font-size:.85em">History unavailable: ' + esc(e.message) + '</div>';
+      })
+      .getPolymarketHistory(m.marketId);
+  }
 }
 
 function setPmRange(days) {
@@ -1529,7 +1545,9 @@ function setPmRange(days) {
   document.querySelectorAll('[data-pm-days]').forEach(function(b) {
     b.classList.toggle('active', b.dataset.pmDays == days);
   });
-  if (_pmActiveMarket) renderPmModal(_pmActiveMarket);
+  if (_pmActiveMarket && _pmHistCache[_pmActiveMarket.marketId]) {
+    renderPmChart(_pmHistCache[_pmActiveMarket.marketId], _pmActiveMarket);
+  }
 }
 
 function closePmModal(e) {
@@ -1539,7 +1557,8 @@ function closePmModal(e) {
   _pmActiveMarket = null;
 }
 
-function renderPmModal(m) {
+// Render header, stats, and outcomes table (immediate, no chart yet)
+function renderPmModalMeta(m) {
   // Header
   document.getElementById('pm-modal-title').textContent = m.question;
   document.getElementById('pm-modal-cat').textContent   = m.category || '';
@@ -1548,10 +1567,8 @@ function renderPmModal(m) {
     var diff = Math.ceil((new Date(m.endDate) - Date.now()) / 86400000);
     endEl.textContent = '· Ends ' + m.endDate.substring(0, 10) + (diff >= 0 ? ' (' + diff + 'd)' : ' (ended)');
   }
-  var linkEl = document.getElementById('pm-modal-link');
-  linkEl.href = 'https://polymarket.com/event/' + m.slug;
+  document.getElementById('pm-modal-link').href = 'https://polymarket.com/event/' + m.slug;
 
-  // Stats bar (4 cells)
   function fmtVol(v) {
     if (!v) return '$0';
     if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
@@ -1566,146 +1583,133 @@ function renderPmModal(m) {
       '<span class="pm-resolved-badge">' + esc(m.resolvedOutcome || 'Resolved') + '</span>' :
       '<span style="color:var(--green)">Active</span>');
 
-  // Filter snapshots by selected range
-  var snapshots = m.recentSnapshots || [];
-  if (_pmActiveDays > 0) {
-    var cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - _pmActiveDays);
-    var cutStr = cutoff.toISOString();
-    snapshots = snapshots.filter(function(s) { return s.snapshotAt >= cutStr; });
-  }
-
-  // Chart
-  var canvas = document.getElementById('pm-hist-chart');
-  if (_pmChart) { _pmChart.destroy(); _pmChart = null; }
-
-  if (snapshots.length > 1) {
-    var labels = snapshots.map(function(s) {
-      var d = new Date(s.snapshotAt);
-      return d.toLocaleDateString([], {month:'short',day:'numeric'}) + ' ' +
-             d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    });
-
-    var outcomes = m.outcomes || [];
-    var isBinary = m.outcomeType === 'binary';
-    var drawCount = isBinary ? 1 : Math.min(outcomes.length, 6);
-    var datasets  = [];
-
-    for (var oi = 0; oi < drawCount; oi++) {
-      var oidx = oi; // closure
-      var vals  = snapshots.map(function(s) {
-        try {
-          var prices = JSON.parse(s.outcomePrices);
-          return Math.round((parseFloat(prices[oidx]) || 0) * 1000) / 10; // % with 1 decimal
-        } catch(e) { return null; }
-      });
-      var color = PM_COLORS[oi % PM_COLORS.length];
-      datasets.push({
-        label:            isBinary ? 'Yes' : String(outcomes[oi] || ('Outcome ' + (oi+1))),
-        data:             vals,
-        borderColor:      color,
-        backgroundColor:  isBinary ? 'rgba(34,197,94,0.06)' : 'transparent',
-        borderWidth:      1.5,
-        pointRadius:      snapshots.length > 80 ? 0 : 2,
-        pointHoverRadius: 5,
-        pointBackgroundColor: color,
-        fill:             isBinary && oi === 0,
-        tension:          0.15,
-        spanGaps:         true
-      });
-    }
-
-    _pmChart = new Chart(canvas, {
-      type: 'line',
-      data: { labels: labels, datasets: datasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: {
-            display: !isBinary,
-            labels: { color: '#b0bccf', boxWidth: 10, font: { size: 11 } }
-          },
-          tooltip: {
-            backgroundColor: '#161b22',
-            borderColor: '#252836',
-            borderWidth: 1,
-            titleColor: '#b0bccf',
-            bodyColor: '#f0f3f8',
-            callbacks: {
-              label: function(ctx) {
-                var v = ctx.parsed.y;
-                if (v === null || v === undefined) return '';
-                return ' ' + ctx.dataset.label + ': ' + v.toFixed(1) + '%';
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            grid: { color: 'rgba(255,255,255,.04)' },
-            ticks: { color: '#8892a4', maxTicksLimit: 8, maxRotation: 0 }
-          },
-          y: {
-            min: 0, max: 100,
-            grid: { color: 'rgba(255,255,255,.04)' },
-            ticks: { color: '#8892a4', callback: function(v) { return v + '%'; } }
-          }
-        }
-      }
-    });
-  } else {
-    // 清空 canvas
-    var ctx2 = canvas.getContext('2d');
-    ctx2.clearRect(0, 0, canvas.width, canvas.height);
-    ctx2.fillStyle = '#6b7a92';
-    ctx2.font = '13px -apple-system,sans-serif';
-    ctx2.textAlign = 'center';
-    ctx2.fillText('Not enough snapshot data yet', canvas.width / 2, canvas.height / 2);
-  }
-
-  // Outcomes table
-  var outcomes = m.outcomes || [];
-  var prices   = m.outcomePrices || [];
+  // Outcomes table (current snapshot + 24h change from recentSnapshots)
+  var outcomes   = m.outcomes || [];
+  var prices     = m.outcomePrices || [];
   var changes24h = computeOutcomeChanges(m.recentSnapshots || [], outcomes, 24);
-
-  // Period change: first to last snapshot in selected range
-  var periodChanges = [];
-  if (snapshots.length >= 2) {
-    try {
-      var fp = JSON.parse(snapshots[0].outcomePrices);
-      var lp = JSON.parse(snapshots[snapshots.length - 1].outcomePrices);
-      periodChanges = outcomes.map(function(_, i) {
-        return (parseFloat(lp[i]) || 0) - (parseFloat(fp[i]) || 0);
-      });
-    } catch(e) {}
+  function fmtChg(chg) {
+    if (chg === undefined || chg === null) return '<span style="color:var(--t3)">—</span>';
+    var pp  = Math.round(chg * 1000) / 10;
+    var col = pp > 0 ? 'var(--green)' : pp < 0 ? 'var(--red)' : 'var(--t3)';
+    return '<span style="color:' + col + '">' + (pp > 0 ? '+' : '') + pp.toFixed(1) + ' pp</span>';
   }
-
   var tbody = document.getElementById('pm-outcomes-tbody');
   tbody.innerHTML = '';
   outcomes.forEach(function(name, i) {
     var isLead = name === m.leadOutcome;
     var pct    = Math.round((prices[i] || 0) * 1000) / 10;
-    var c24    = changes24h[i];
-    var cp     = periodChanges[i];
-
-    function fmtChg(chg) {
-      if (chg === undefined || chg === null) return '<span style="color:var(--t3)">—</span>';
-      var pp = Math.round(chg * 1000) / 10;
-      var col = pp > 0 ? 'var(--green)' : pp < 0 ? 'var(--red)' : 'var(--t3)';
-      return '<span style="color:' + col + '">' + (pp > 0 ? '+' : '') + pp.toFixed(1) + ' pp</span>';
-    }
-
-    var dot = '<span class="pm-dot" style="background:' + PM_COLORS[i % PM_COLORS.length] + '"></span>';
-    var tr  = document.createElement('tr');
+    var dot    = '<span class="pm-dot" style="background:' + PM_COLORS[i % PM_COLORS.length] + '"></span>';
+    var tr     = document.createElement('tr');
     if (isLead) tr.className = 'lead';
     tr.innerHTML =
       '<td>' + dot + ' ' + esc(String(name)) + '</td>' +
       '<td style="font-variant-numeric:tabular-nums">' + pct.toFixed(1) + '%</td>' +
-      '<td>' + fmtChg(cp) + '</td>' +
-      '<td>' + fmtChg(c24) + '</td>';
+      '<td id="pm-period-chg-' + i + '">—</td>' +
+      '<td>' + fmtChg(changes24h[i]) + '</td>';
     tbody.appendChild(tr);
+  });
+}
+
+/**
+ * 渲染 Chart.js 圖表（CLOB 歷史資料）
+ * histData = { marketId, outcomes: { "Yes": [{t,p},...], "No": [...] } }
+ */
+function renderPmChart(histData, m) {
+  document.getElementById('pm-modal-loading').style.display = 'none';
+  var canvas = document.getElementById('pm-hist-chart');
+  canvas.style.display = 'block';
+  if (_pmChart) { _pmChart.destroy(); _pmChart = null; }
+
+  var outcomeData = histData.outcomes || {};
+  var outcomes    = m.outcomes || [];
+  var isBinary    = m.outcomeType === 'binary';
+
+  // Filter by selected range
+  var cutStr = null;
+  if (_pmActiveDays > 0) {
+    var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - _pmActiveDays);
+    cutStr = cutoff.toISOString();
+  }
+
+  // Build unified timestamp array from first available outcome
+  var refName   = outcomes[0] || Object.keys(outcomeData)[0] || '';
+  var refPoints = (outcomeData[refName] || []).slice();
+  if (cutStr) refPoints = refPoints.filter(function(pt) { return pt.t >= cutStr; });
+
+  if (!refPoints.length) {
+    var ctx2 = canvas.getContext('2d');
+    ctx2.clearRect(0, 0, canvas.width, canvas.height);
+    ctx2.fillStyle = '#6b7a92'; ctx2.font = '13px sans-serif';
+    ctx2.textAlign = 'center';
+    ctx2.fillText('No data for this range', canvas.width / 2, canvas.height / 2 + 20);
+    return;
+  }
+
+  var labels     = refPoints.map(function(pt) {
+    var d = new Date(pt.t);
+    return d.toLocaleDateString([], {month:'short',day:'numeric'}) + ' ' +
+           d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  });
+  var timestamps = refPoints.map(function(pt) { return pt.t; });
+
+  var drawNames = isBinary ? [outcomes[0]] : outcomes.slice(0, 6);
+  var datasets  = drawNames.map(function(name, oi) {
+    var pts = (outcomeData[name] || []).slice();
+    if (cutStr) pts = pts.filter(function(pt) { return pt.t >= cutStr; });
+    var tsMap = {}; pts.forEach(function(pt) { tsMap[pt.t] = pt.p; });
+    var vals  = timestamps.map(function(ts) {
+      return tsMap[ts] !== undefined ? Math.round(tsMap[ts] * 1000) / 10 : null;
+    });
+    var color = PM_COLORS[oi % PM_COLORS.length];
+    return {
+      label: name, data: vals, borderColor: color,
+      backgroundColor: (isBinary && oi === 0) ? 'rgba(34,197,94,0.06)' : 'transparent',
+      borderWidth: 1.5,
+      pointRadius: timestamps.length > 120 ? 0 : 2, pointHoverRadius: 5,
+      pointBackgroundColor: color,
+      fill: isBinary && oi === 0, tension: 0.1, spanGaps: true
+    };
+  });
+
+  _pmChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: !isBinary, labels: { color: '#b0bccf', boxWidth: 10, font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: '#161b22', borderColor: '#252836', borderWidth: 1,
+          titleColor: '#b0bccf', bodyColor: '#f0f3f8',
+          callbacks: {
+            label: function(ctx) {
+              var v = ctx.parsed.y;
+              return v !== null && v !== undefined ? ' ' + ctx.dataset.label + ': ' + v.toFixed(1) + '%' : '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,.04)' },
+             ticks: { color: '#8892a4', maxTicksLimit: 8, maxRotation: 0 } },
+        y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,.04)' },
+             ticks: { color: '#8892a4', callback: function(v) { return v + '%'; } } }
+      }
+    }
+  });
+
+  // Update period change column
+  outcomes.forEach(function(name, i) {
+    var el  = document.getElementById('pm-period-chg-' + i);
+    if (!el) return;
+    var pts = (outcomeData[name] || []).slice();
+    if (cutStr) pts = pts.filter(function(pt) { return pt.t >= cutStr; });
+    if (pts.length < 2) { el.innerHTML = '<span style="color:var(--t3)">—</span>'; return; }
+    var chg = pts[pts.length - 1].p - pts[0].p;
+    var pp  = Math.round(chg * 1000) / 10;
+    var col = pp > 0 ? 'var(--green)' : pp < 0 ? 'var(--red)' : 'var(--t3)';
+    el.innerHTML = '<span style="color:' + col + '">' + (pp > 0 ? '+' : '') + pp.toFixed(1) + ' pp</span>';
   });
 }
 
