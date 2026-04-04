@@ -11,10 +11,10 @@
   --bg:       #09090f;
   --bg-card:  #0f1117;
   --bg-hover: #141720;
-  --border:   #1d2130;
-  --text:     #edf0f5;
-  --t2:       #8892a4;
-  --t3:       #3d4556;
+  --border:   #252836;
+  --text:     #f0f3f8;
+  --t2:       #b0bccf;
+  --t3:       #6b7a92;
   --green:    #22c55e;
   --green-bg: rgba(34,197,94,.07);
   --red:      #ef4444;
@@ -161,7 +161,7 @@ body {
 .bg-g{background:var(--green)} .bg-r{background:var(--red)} .bg-y{background:var(--yellow)} .bg-o{background:var(--orange)}
 
 /* ── SECTION TITLE ───────────────────────────────── */
-.sec{font-size:.68em;text-transform:uppercase;letter-spacing:2px;color:var(--t3);
+.sec{font-size:.68em;text-transform:uppercase;letter-spacing:2px;color:var(--t2);
   margin:24px 0 12px;display:flex;align-items:center;justify-content:space-between}
 .sec a{font-size:1em;color:var(--blue);text-decoration:none;letter-spacing:0;text-transform:none}
 .sec a:hover{text-decoration:underline}
@@ -234,7 +234,7 @@ body {
 .sp-cursor{position:absolute;top:-5px;bottom:-5px;width:5px;background:#fff;
   border-radius:100px;transform:translateX(-50%);box-shadow:0 0 8px rgba(255,255,255,.3)}
 .sp-legend{display:flex;justify-content:space-between;margin-top:7px;
-  font-size:.68em;color:var(--t3)}
+  font-size:.68em;color:var(--t2)}
 .sp-status{margin-top:10px;font-size:.8em}
 
 /* ── PORTFOLIO ────────────────────────────────────── */
@@ -348,7 +348,7 @@ body {
   gap:1px;background:var(--border);border-bottom:1px solid var(--border);flex-shrink:0;
 }
 .stat-cell{background:var(--bg-card);padding:10px 14px}
-.stat-label{font-size:.65em;text-transform:uppercase;letter-spacing:1px;color:var(--t3);margin-bottom:3px}
+.stat-label{font-size:.65em;text-transform:uppercase;letter-spacing:1px;color:var(--t2);margin-bottom:3px}
 .stat-val  {font-size:.95em;font-weight:600;font-variant-numeric:tabular-nums}
 
 .modal-chart-wrap{padding:20px 22px;flex:1;min-height:0;position:relative}
@@ -1015,10 +1015,10 @@ function renderHistoryChart(data) {
         legend: { display: false },
         tooltip: {
           backgroundColor: '#161b22',
-          borderColor: '#1d2130',
+          borderColor: '#252836',
           borderWidth: 1,
-          titleColor: '#8892a4',
-          bodyColor: '#edf0f5',
+          titleColor: '#b0bccf',
+          bodyColor: '#f0f3f8',
           callbacks: {
             label: function(ctx) {
               var v = ctx.parsed.y;
@@ -1031,7 +1031,7 @@ function renderHistoryChart(data) {
         x: {
           grid: { color: 'rgba(255,255,255,.04)' },
           ticks: {
-            color: '#4b5563', maxTicksLimit: 8, maxRotation: 0,
+            color: '#8892a4', maxTicksLimit: 8, maxRotation: 0,
             callback: function(val, idx) {
               var d = this.getLabelForValue(val);
               return d ? d.substring(0, 7) : '';
@@ -1041,7 +1041,7 @@ function renderHistoryChart(data) {
         y: {
           grid: { color: 'rgba(255,255,255,.04)' },
           ticks: {
-            color: '#4b5563',
+            color: '#8892a4',
             callback: function(v) {
               return meta.unit === '$' ? '$' + v.toFixed(0) : v.toFixed(1) + (meta.unit||'');
             }
