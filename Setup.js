@@ -293,6 +293,25 @@ function fetchHistoricalData() {
 }
 
 /**
+ * Polymarket 一次性初始化（首次使用執行一次）
+ * 自動設定 POLYMARKET_SS_ID 並建立 4 個 Sheets
+ */
+function setupPolymarket() {
+  // 設定獨立 Spreadsheet ID
+  PROPS_.setProperty('POLYMARKET_SS_ID', '1aiw0OVTP86AgxQp9ckQqflVdvEugcqIE-B7dlQhdLEk');
+  Logger.log('POLYMARKET_SS_ID set: 1aiw0OVTP86AgxQp9ckQqflVdvEugcqIE-B7dlQhdLEk');
+
+  // 初始化 4 個 Sheets（Markets, PriceHistory, TopMarkets, Log）
+  initPolymarketSheets();
+
+  // 立即抓取第一批資料
+  fetchPolymarketData();
+
+  Logger.log('Polymarket setup complete. Check the Polymarket Spreadsheet for data.');
+  log_('Setup', 'Polymarket initialized with SS ID and first fetch done');
+}
+
+/**
  * 初始化 Sheet 結構（首次使用時執行一次）
  */
 function initializeSheets() {
