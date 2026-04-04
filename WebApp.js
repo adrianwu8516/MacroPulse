@@ -161,11 +161,11 @@ function getStatusForDashboard() {
 }
 
 /**
- * 回傳某指標的歷史時序數據（供 Dashboard 圖表使用）
- * @param {string} id   - 指標 ID (FEDFUNDS, VIX, T10Y2Y, ...)
- * @param {number} days - 回傳天數（預設 365）
+ * 回傳某指標的完整歷史時序數據（供 Dashboard 圖表使用）
+ * 不做時間範圍過濾，讓前端依 range 按鈕自行切片。
+ * @param {string} id - 指標 ID (FEDFUNDS, VIX, T10Y2Y, ...)
  */
-function getIndicatorHistory(id, days) {
+function getIndicatorHistory(id) {
   var colMap = {
     'FEDFUNDS': 'FEDFUNDS',
     'T10Y2Y':   'T10Y2Y',
@@ -193,9 +193,6 @@ function getIndicatorHistory(id, days) {
   var colIdx  = headers.indexOf(colName);
   if (colIdx === -1) return { dates: [], values: [], id: id };
 
-  var cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - (days || 365));
-
   var tz = Session.getScriptTimeZone();
   var points = [];
 
@@ -203,10 +200,10 @@ function getIndicatorHistory(id, days) {
     var rawDate = data[i][dateIdx];
     var rawVal  = data[i][colIdx];
     var numVal  = parseFloat(rawVal);
-    if (isNaN(numVal) || rawVal === '') continue;
+    if (isNaN(numVal) || rawVal === '' || rawVal === null) continue;
 
     var dt = rawDate instanceof Date ? rawDate : new Date(rawDate);
-    if (isNaN(dt.getTime()) || dt < cutoff) continue;
+    if (isNaN(dt.getTime())) continue;
 
     points.push({
       d: Utilities.formatDate(dt, tz, 'yyyy-MM-dd'),
@@ -218,7 +215,6 @@ function getIndicatorHistory(id, days) {
 
   return {
     id:     id,
-    days:   days || 365,
     dates:  points.map(function(p) { return p.d; }),
     values: points.map(function(p) { return p.v; })
   };

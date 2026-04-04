@@ -475,9 +475,10 @@ body {
     </div>
     <div class="modal-range">
       <button class="range-btn" onclick="setRange(90)"  data-days="90">3M</button>
-      <button class="range-btn active" onclick="setRange(180)" data-days="180">6M</button>
-      <button class="range-btn" onclick="setRange(365)" data-days="365">1Y</button>
+      <button class="range-btn" onclick="setRange(180)" data-days="180">6M</button>
+      <button class="range-btn active" onclick="setRange(365)" data-days="365">1Y</button>
       <button class="range-btn" onclick="setRange(1825)" data-days="1825">5Y</button>
+      <button class="range-btn" onclick="setRange(0)" data-days="0">All</button>
     </div>
     <div class="modal-stats" id="modal-stats">
       <div class="stat-cell"><div class="stat-label">Current</div><div class="stat-val" id="stat-cur">—</div></div>
@@ -901,26 +902,27 @@ function renderStatus(result){
 // ═══════════════════════════════════════════════════
 var _histChart   = null;
 var _activeId    = null;
-var _activeDays  = 180;
+var _activeDays  = 365;
+var _histCache   = {};   // id → { dates, values } — fetched once per session
 
 var IND_META = {
-  FEDFUNDS:{ label:'Federal Funds Rate',     unit:'%',    zero:false },
-  T10Y2Y:  { label:'Yield Curve (10Y-2Y)',   unit:'%',    zero:true  },
-  DGS10:   { label:'10-Year Treasury Yield', unit:'%',    zero:false },
-  CPI:     { label:'CPI Inflation (ann.)',   unit:'%',    zero:true  },
-  UNRATE:  { label:'Unemployment Rate',      unit:'%',    zero:false },
-  PMI:     { label:'ISM Manufacturing PMI',  unit:'',     zero:true  },
-  GDP:     { label:'GDP Growth (ann.)',       unit:'%',    zero:true  },
-  VIX:     { label:'VIX Volatility Index',   unit:'',     zero:false },
-  FG:      { label:'Fear & Greed Index',     unit:'/100', zero:false },
-  SP500:   { label:'SPY / S&P 500 Price',    unit:'$',    zero:false }
+  FEDFUNDS:{ label:'Federal Funds Rate',     unit:'%',    zero:false, freq:'monthly'   },
+  T10Y2Y:  { label:'Yield Curve (10Y-2Y)',   unit:'%',    zero:true,  freq:'daily'     },
+  DGS10:   { label:'10-Year Treasury Yield', unit:'%',    zero:false, freq:'daily'     },
+  CPI:     { label:'CPI Inflation (ann.)',   unit:'%',    zero:true,  freq:'monthly'   },
+  UNRATE:  { label:'Unemployment Rate',      unit:'%',    zero:false, freq:'monthly'   },
+  PMI:     { label:'ISM Manufacturing PMI',  unit:'',     zero:true,  freq:'monthly'   },
+  GDP:     { label:'GDP Growth (ann.)',       unit:'%',    zero:true,  freq:'quarterly' },
+  VIX:     { label:'VIX Volatility Index',   unit:'',     zero:false, freq:'daily'     },
+  FG:      { label:'Fear & Greed Index',     unit:'/100', zero:false, freq:'daily'     },
+  SP500:   { label:'SPY / S&P 500 Price',    unit:'$',    zero:false, freq:'daily'     }
 };
 
 function openHistory(id) {
   _activeId   = id;
-  _activeDays = 180;
+  _activeDays = 365;
 
-  var meta = IND_META[id] || { label: id, unit: '', zero: false };
+  var meta = IND_META[id] || { label: id, unit: '', zero: false, freq: 'daily' };
   document.getElementById('modal-title').textContent = meta.label;
   document.getElementById('modal-meta').textContent  = '— loading —';
 
@@ -932,7 +934,21 @@ function openHistory(id) {
   document.getElementById('modal-loading').style.display = 'flex';
   document.getElementById('hist-chart').style.display    = 'none';
 
-  loadHistory(id, _activeDays);
+  // Use cached data if available, otherwise fetch from server
+  if (_histCache[id]) {
+    renderHistoryChart(_histCache[id]);
+  } else {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        _histCache[id] = data;
+        renderHistoryChart(data);
+      })
+      .withFailureHandler(function(e) {
+        document.getElementById('modal-loading').innerHTML =
+          '<div style="text-align:center;color:var(--red)">Error: ' + esc(e.message) + '</div>';
+      })
+      .getIndicatorHistory(id);
+  }
 }
 
 function setRange(days) {
@@ -940,9 +956,9 @@ function setRange(days) {
   document.querySelectorAll('.range-btn').forEach(function(b){
     b.classList.toggle('active', b.dataset.days == days);
   });
-  document.getElementById('modal-loading').style.display = 'flex';
-  document.getElementById('hist-chart').style.display    = 'none';
-  loadHistory(_activeId, days);
+  if (_histCache[_activeId]) {
+    renderHistoryChart(_histCache[_activeId]);
+  }
 }
 
 function closeModal(e) {
@@ -951,24 +967,49 @@ function closeModal(e) {
   if (_histChart) { _histChart.destroy(); _histChart = null; }
 }
 
-function loadHistory(id, days) {
-  google.script.run
-    .withSuccessHandler(renderHistoryChart)
-    .withFailureHandler(function(e) {
-      document.getElementById('modal-loading').textContent = 'Error: ' + esc(e.message);
-    })
-    .getIndicatorHistory(id, days);
+// Filter full history arrays to the selected day range, client-side
+function sliceByDays(allDates, allValues, days) {
+  if (!days || !allDates.length) return { dates: allDates, values: allValues };
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  var cutStr = cutoff.toISOString().substring(0, 10);
+  var idx = 0;
+  while (idx < allDates.length && allDates[idx] < cutStr) idx++;
+  return { dates: allDates.slice(idx), values: allValues.slice(idx) };
 }
 
 function renderHistoryChart(data) {
-  var dates  = data.dates  || [];
-  var values = data.values || [];
-  if (!dates.length) {
-    document.getElementById('modal-loading').textContent = 'No history data available yet. Run fetchHistoricalData() in the GAS editor first.';
+  var allDates  = data.dates  || [];
+  var allValues = data.values || [];
+
+  if (!allDates.length) {
+    document.getElementById('modal-loading').innerHTML =
+      '<div style="text-align:center;color:var(--t2);line-height:1.7">' +
+      'No history data found.<br>' +
+      '<span style="font-size:.85em;color:var(--t3)">Run <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px">fetchHistoricalData()</code> once in the GAS editor,<br>then set up triggers with <code style="background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px">setupAllTriggers()</code>.</span>' +
+      '</div>';
     return;
   }
 
-  var meta = IND_META[data.id] || { label: data.id, unit: '', zero: false };
+  var meta = IND_META[data.id] || { label: data.id, unit: '', zero: false, freq: 'daily' };
+
+  // Slice to selected range
+  var sliced = sliceByDays(allDates, allValues, _activeDays);
+  var dates  = sliced.dates;
+  var values = sliced.values;
+
+  // If range has no data, fall back to showing all available data
+  if (!dates.length) {
+    dates  = allDates;
+    values = allValues;
+    document.getElementById('modal-meta').textContent =
+      'Showing all available data (' + allDates[0] + ' → ' + allDates[allDates.length-1] + ')';
+  } else {
+    document.getElementById('modal-meta').textContent =
+      dates[0] + ' → ' + dates[dates.length-1] +
+      ' · ' + dates.length + ' pts' +
+      (meta.freq !== 'daily' ? ' · ' + meta.freq : '');
+  }
 
   // Stats
   var cur = values[values.length - 1];
@@ -976,21 +1017,27 @@ function renderHistoryChart(data) {
   var lo  = Math.min.apply(null, values);
   var avg = values.reduce(function(a,b){return a+b},0) / values.length;
 
-  document.getElementById('modal-meta').textContent  = dates[0] + ' → ' + dates[dates.length-1] + ' (' + dates.length + ' data pts)';
-  document.getElementById('stat-cur').textContent  = meta.unit === '$' ? '$'+fmt(cur) : cur.toFixed(2)+(meta.unit||'');
-  document.getElementById('stat-hi').textContent   = meta.unit === '$' ? '$'+fmt(hi)  : hi.toFixed(2)+(meta.unit||'');
-  document.getElementById('stat-lo').textContent   = meta.unit === '$' ? '$'+fmt(lo)  : lo.toFixed(2)+(meta.unit||'');
-  document.getElementById('stat-avg').textContent  = meta.unit === '$' ? '$'+fmt(avg) : avg.toFixed(2)+(meta.unit||'');
+  function fmtVal(v) { return meta.unit === '$' ? '$'+fmt(v) : v.toFixed(2)+(meta.unit||''); }
+  document.getElementById('stat-cur').textContent  = fmtVal(cur);
+  document.getElementById('stat-hi').textContent   = fmtVal(hi);
+  document.getElementById('stat-lo').textContent   = fmtVal(lo);
+  document.getElementById('stat-avg').textContent  = fmtVal(avg);
 
   // Color based on current value vs avg
   var lineColor = cur >= avg ? '#22c55e' : '#ef4444';
+  var fillColor = cur >= avg ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)';
 
-  // Chart
+  // Show chart
   document.getElementById('modal-loading').style.display = 'none';
   var canvas = document.getElementById('hist-chart');
   canvas.style.display = 'block';
 
   if (_histChart) _histChart.destroy();
+
+  // Monthly/quarterly: show larger point dots, no fill area
+  var isSparse = meta.freq === 'monthly' || meta.freq === 'quarterly';
+  var ptRadius  = isSparse ? 4 : (dates.length > 180 ? 0 : 2);
+  var ptHover   = isSparse ? 6 : 5;
 
   _histChart = new Chart(canvas, {
     type: 'line',
@@ -999,12 +1046,14 @@ function renderHistoryChart(data) {
       datasets: [{
         data: values,
         borderColor: lineColor,
-        backgroundColor: lineColor.replace(')', ', 0.06)').replace('rgb', 'rgba'),
-        borderWidth: 1.5,
-        pointRadius: dates.length > 100 ? 0 : 3,
-        pointHoverRadius: 5,
-        fill: true,
-        tension: 0.3
+        backgroundColor: isSparse ? 'transparent' : fillColor,
+        borderWidth: isSparse ? 2 : 1.5,
+        pointRadius: ptRadius,
+        pointHoverRadius: ptHover,
+        pointBackgroundColor: lineColor,
+        fill: !isSparse,
+        tension: isSparse ? 0 : 0.3,
+        spanGaps: true
       }]
     },
     options: {
@@ -1022,6 +1071,7 @@ function renderHistoryChart(data) {
           callbacks: {
             label: function(ctx) {
               var v = ctx.parsed.y;
+              if (v === null || v === undefined) return '';
               return meta.unit === '$' ? ' $' + fmt(v) : ' ' + v.toFixed(2) + (meta.unit||'');
             }
           }
@@ -1032,7 +1082,7 @@ function renderHistoryChart(data) {
           grid: { color: 'rgba(255,255,255,.04)' },
           ticks: {
             color: '#8892a4', maxTicksLimit: 8, maxRotation: 0,
-            callback: function(val, idx) {
+            callback: function(val) {
               var d = this.getLabelForValue(val);
               return d ? d.substring(0, 7) : '';
             }
@@ -1045,12 +1095,7 @@ function renderHistoryChart(data) {
             callback: function(v) {
               return meta.unit === '$' ? '$' + v.toFixed(0) : v.toFixed(1) + (meta.unit||'');
             }
-          },
-          afterDataLimits: meta.zero ? function(axis) {
-            if (axis.min > 0 && axis.max > 0) return;
-            if (axis.max < 0 && axis.min < 0) return;
-            // add zero line reference
-          } : undefined
+          }
         }
       }
     }
