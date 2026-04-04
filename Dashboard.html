@@ -380,6 +380,129 @@ body {
   .hero-score-num{font-size:64px}
   .sp500-card{grid-template-columns:1fr}
   .main{padding:16px 14px 60px}
+  .pm-card-body{grid-template-columns:1fr}
+  .pm-chart-panel{display:none}
+}
+
+/* ── PREDICTION MARKETS ──────────────────────────── */
+.pm-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(420px,1fr));
+  gap:10px;margin-bottom:16px;
+}
+.pm-card{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:0;
+  cursor:pointer;transition:border-color .2s,background .15s;
+  position:relative;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.pm-card:hover{border-color:rgba(96,165,250,.4);background:var(--bg-hover)}
+.pm-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:var(--t3);
+}
+.pm-card.cat-politics::before{background:var(--blue)}
+.pm-card.cat-crypto::before{background:var(--yellow)}
+.pm-card.cat-sports::before{background:var(--green)}
+.pm-card.cat-finance::before{background:var(--orange)}
+.pm-card.cat-science::before{background:#a855f7}
+
+.pm-card-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px 0;
+}
+.pm-header-left{display:flex;align-items:center;gap:8px}
+.pm-cat-badge{
+  font-size:.65em;font-weight:600;letter-spacing:.7px;text-transform:uppercase;
+  color:var(--t2);
+}
+.pm-freq-badge{font-size:.65em;color:var(--t3)}
+.pm-days-left{font-size:.68em;color:var(--t3)}
+.pm-days-left.ending{color:var(--orange)}
+.pm-days-left.ended{color:var(--t3);opacity:.6}
+
+.pm-question{
+  font-size:.88em;font-weight:600;color:var(--text);
+  line-height:1.4;padding:8px 14px 10px;
+}
+
+/* card body: left outcomes + right chart */
+.pm-card-body{
+  display:grid;grid-template-columns:1fr 200px;
+  flex:1;border-top:1px solid var(--border);
+}
+.pm-outcomes-panel{
+  padding:10px 14px;display:flex;flex-direction:column;gap:6px;
+  border-right:1px solid var(--border);
+}
+.pm-outcome-row{
+  display:flex;align-items:center;gap:8px;
+  font-size:.82em;
+}
+.pm-outcome-arrow{
+  font-size:.9em;width:14px;text-align:center;flex-shrink:0;
+  color:var(--t3);
+}
+.pm-outcome-arrow.up{color:var(--green)}
+.pm-outcome-arrow.down{color:var(--red)}
+.pm-outcome-name{
+  flex:1;color:var(--t2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pm-outcome-row.lead .pm-outcome-name{color:var(--text);font-weight:600}
+.pm-outcome-pct{
+  font-size:1em;font-weight:700;font-variant-numeric:tabular-nums;
+  color:var(--t2);flex-shrink:0;min-width:36px;text-align:right;
+}
+.pm-outcome-row.lead .pm-outcome-pct{color:var(--text)}
+.pm-more-outcomes{font-size:.72em;color:var(--t3);padding-left:22px}
+
+.pm-chart-panel{
+  position:relative;padding:6px 8px 6px 6px;
+  display:flex;align-items:center;justify-content:center;
+}
+.pm-chart-panel canvas{width:100%!important;height:100%!important;max-height:100px}
+
+.pm-card-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 14px;border-top:1px solid var(--border);
+}
+.pm-vol-label{font-size:.68em;color:var(--t2)}
+.pm-vol-val{font-size:.68em;color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.pm-source{font-size:.65em;color:var(--t3);display:flex;align-items:center;gap:4px}
+
+/* PM Detail Modal */
+.pm-modal-meta-row{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:3px;
+}
+.pm-modal-stats{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:1px;background:var(--border);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.pm-modal-outcomes-wrap{
+  padding:14px 22px;border-top:1px solid var(--border);flex-shrink:0;
+}
+.pm-modal-outcomes-tbl{width:100%;border-collapse:collapse;font-size:.82em}
+.pm-modal-outcomes-tbl th{
+  padding:5px 10px;text-align:left;color:var(--t2);
+  font-size:.68em;letter-spacing:.8px;text-transform:uppercase;font-weight:500;
+  border-bottom:1px solid var(--border);
+}
+.pm-modal-outcomes-tbl td{
+  padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.03);color:var(--t2);
+}
+.pm-modal-outcomes-tbl tr.lead td{color:var(--text);font-weight:600}
+.pm-link{font-size:.78em;color:var(--blue);text-decoration:none}
+.pm-link:hover{text-decoration:underline}
+.pm-resolved-badge{
+  display:inline-flex;align-items:center;
+  padding:2px 9px;border-radius:100px;
+  background:rgba(34,197,94,.12);color:var(--green);
+  font-size:.68em;font-weight:600;letter-spacing:.5px;
+}
+.pm-dot{
+  width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;
 }
 </style>
 </head>
@@ -447,6 +570,19 @@ body {
   <div class="sec">S&amp;P 500 / SPY</div>
   <div id="sp500-wrap"><div class="skel" style="height:110px;margin-bottom:16px"></div></div>
 
+  <!-- PREDICTION MARKETS -->
+  <div class="sec">
+    Prediction Markets
+    <span id="pm-last-updated" style="font-size:.82em;color:var(--t3);letter-spacing:0;text-transform:none;font-weight:400;margin-left:8px"></span>
+  </div>
+  <div id="pm-wrap">
+    <div class="pm-grid">
+      <div class="skel" style="height:180px"></div>
+      <div class="skel" style="height:180px"></div>
+      <div class="skel" style="height:180px"></div>
+    </div>
+  </div>
+
   <!-- HOLDINGS -->
   <div class="sec" id="holdings-sec-title">
     Portfolio Holdings
@@ -491,6 +627,49 @@ body {
         <div class="spin"></div> Loading history…
       </div>
       <canvas id="hist-chart" style="display:none"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── PM DETAIL MODAL ───────────────────────────── -->
+<div class="modal-overlay" id="pm-modal-overlay" onclick="closePmModal(event)">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:780px">
+    <div class="modal-header">
+      <div style="flex:1;min-width:0;padding-right:12px">
+        <div class="modal-title" id="pm-modal-title" style="line-height:1.4;font-size:.95em">—</div>
+        <div class="pm-modal-meta-row">
+          <span class="modal-meta" id="pm-modal-cat">—</span>
+          <span class="modal-meta" id="pm-modal-end"></span>
+          <a class="pm-link" id="pm-modal-link" href="#" target="_blank">View on Polymarket ↗</a>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closePmModal()">✕</button>
+    </div>
+    <div class="pm-modal-stats" id="pm-modal-stats"></div>
+    <div class="modal-range" id="pm-modal-range">
+      <button class="range-btn active" onclick="setPmRange(1)"  data-pm-days="1">1D</button>
+      <button class="range-btn"        onclick="setPmRange(7)"  data-pm-days="7">7D</button>
+      <button class="range-btn"        onclick="setPmRange(30)" data-pm-days="30">30D</button>
+      <button class="range-btn"        onclick="setPmRange(0)"  data-pm-days="0">All</button>
+    </div>
+    <div class="modal-chart-wrap" style="padding:16px 22px">
+      <div class="modal-loading" id="pm-modal-loading" style="display:none">
+        <div class="spin"></div> Loading…
+      </div>
+      <canvas id="pm-hist-chart" style="max-height:240px;display:block"></canvas>
+    </div>
+    <div class="pm-modal-outcomes-wrap">
+      <table class="pm-modal-outcomes-tbl">
+        <thead>
+          <tr>
+            <th>Outcome</th>
+            <th>Current</th>
+            <th>Period Change</th>
+            <th>24h Change</th>
+          </tr>
+        </thead>
+        <tbody id="pm-outcomes-tbody"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -1104,8 +1283,438 @@ function renderHistoryChart(data) {
 
 // Close on Escape
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeModal({target: document.getElementById('modal-overlay')});
+  if (e.key === 'Escape') {
+    closeModal({target: document.getElementById('modal-overlay')});
+    closePmModal({target: document.getElementById('pm-modal-overlay')});
+  }
 });
+
+// ═══════════════════════════════════════════════════
+// PREDICTION MARKETS
+// ═══════════════════════════════════════════════════
+var _pmData         = null;  // cached from server
+var _pmChart        = null;
+var _pmActiveMarket = null;
+var _pmActiveDays   = 1;
+
+// Consistent colors per outcome index (matches Polymarket's palette)
+var PM_COLORS = ['#60a5fa','#a855f7','#eab308','#f97316','#22c55e','#ef4444','#06b6d4','#ec4899'];
+
+function renderPolymarkets(result) {
+  _pmData = result;
+  var wrap    = document.getElementById('pm-wrap');
+  var markets = (result && result.markets) || [];
+
+  var lu = document.getElementById('pm-last-updated');
+  if (lu) {
+    if (result && result.fetchedAt) {
+      var d = new Date(result.fetchedAt);
+      lu.textContent = 'via Polymarket · ' + d.toLocaleTimeString();
+    }
+  }
+
+  if (!markets.length) {
+    wrap.innerHTML =
+      '<div style="color:var(--t2);padding:16px 0;font-size:.85em">' +
+      'No prediction markets data yet. Run <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px">fetchPolymarketData()</code> ' +
+      'in the GAS editor, then check that <code>POLYMARKET_SS_ID</code> is set in Script Properties.</div>';
+    return;
+  }
+
+  var grid = document.createElement('div');
+  grid.className = 'pm-grid';
+  markets.forEach(function(m) { grid.appendChild(buildPmCard(m)); });
+
+  wrap.innerHTML = '';
+  wrap.appendChild(grid);
+
+  // Draw sparklines after layout (rAF ensures canvas is sized)
+  requestAnimationFrame(function() {
+    markets.forEach(function(m) {
+      var canvas = document.getElementById('pm-spark-' + safePmId(m.marketId));
+      if (canvas && m.recentSnapshots && m.recentSnapshots.length > 1) {
+        drawPmSparkline(canvas, m.recentSnapshots, m.outcomes);
+      }
+    });
+  });
+}
+
+function safePmId(id) { return String(id).replace(/[^a-zA-Z0-9]/g, '_'); }
+
+function buildPmCard(m) {
+  var card = document.createElement('div');
+  var catKey = (m.category || '').toLowerCase();
+  var catClass = catKey.indexOf('politi') > -1 ? 'cat-politics' :
+                 catKey.indexOf('crypto') > -1 || catKey.indexOf('bitcoin') > -1 ? 'cat-crypto' :
+                 catKey.indexOf('sport') > -1  || catKey.indexOf('nba') > -1 || catKey.indexOf('nfl') > -1 ? 'cat-sports' :
+                 catKey.indexOf('financ') > -1 || catKey.indexOf('econ') > -1 || catKey.indexOf('market') > -1 ? 'cat-finance' :
+                 catKey.indexOf('science') > -1 || catKey.indexOf('tech') > -1 ? 'cat-science' : '';
+  card.className = 'pm-card ' + catClass;
+
+  // Days left
+  var daysLeft = '', daysClass = '';
+  if (m.endDate) {
+    var end  = new Date(m.endDate);
+    var diff = Math.ceil((end - Date.now()) / 86400000);
+    if (isNaN(diff))       { daysLeft = ''; }
+    else if (diff < 0)     { daysLeft = 'Ended';      daysClass = 'ended'; }
+    else if (diff === 0)   { daysLeft = 'Ends today'; daysClass = 'ending'; }
+    else if (diff <= 3)    { daysLeft = diff + 'd left'; daysClass = 'ending'; }
+    else if (diff <= 30)   { daysLeft = diff + ' days'; }
+    else                   { daysLeft = Math.ceil(diff / 7) + ' wks'; }
+  }
+
+  // Compute 24h change per outcome
+  var changes24h = computeOutcomeChanges(m.recentSnapshots, m.outcomes, 24);
+
+  // Outcomes HTML
+  var outHtml = '';
+  var outcomes   = m.outcomes || [];
+  var prices     = m.outcomePrices || [];
+  var showCount  = Math.min(outcomes.length, 5);
+  for (var i = 0; i < showCount; i++) {
+    var isLead = outcomes[i] === m.leadOutcome;
+    var pct    = Math.round((prices[i] || 0) * 100);
+    var chg    = changes24h[i];
+    var arrow  = chg === undefined ? '' : chg > 0.005 ? 'up' : chg < -0.005 ? 'down' : '';
+    var arrowChar = arrow === 'up' ? '↑' : arrow === 'down' ? '↓' : '·';
+    var dot    = '<span class="pm-dot" style="background:' + PM_COLORS[i % PM_COLORS.length] + ';margin-right:2px"></span>';
+    outHtml +=
+      '<div class="pm-outcome-row' + (isLead ? ' lead' : '') + '">' +
+        dot +
+        '<span class="pm-outcome-arrow ' + arrow + '">' + arrowChar + '</span>' +
+        '<span class="pm-outcome-name">' + esc(String(outcomes[i])) + '</span>' +
+        '<span class="pm-outcome-pct">' + pct + '%</span>' +
+      '</div>';
+  }
+  if (outcomes.length > 5) {
+    outHtml += '<div class="pm-more-outcomes">+' + (outcomes.length - 5) + ' more</div>';
+  }
+
+  function fmtVol(v) {
+    if (!v) return '$0';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K';
+    return '$' + v.toFixed(0);
+  }
+
+  card.innerHTML =
+    '<div class="pm-card-header">' +
+      '<div class="pm-header-left">' +
+        '<span class="pm-cat-badge">' + esc(m.category || 'Market') + '</span>' +
+        (m.outcomeType === 'binary' ? '<span class="pm-freq-badge">· Binary</span>' :
+         '<span class="pm-freq-badge">· ' + (m.outcomes.length) + ' outcomes</span>') +
+      '</div>' +
+      (daysLeft ? '<span class="pm-days-left ' + daysClass + '">' + esc(daysLeft) + '</span>' : '') +
+    '</div>' +
+    '<div class="pm-question">' + esc(m.question) + '</div>' +
+    '<div class="pm-card-body">' +
+      '<div class="pm-outcomes-panel">' + outHtml + '</div>' +
+      '<div class="pm-chart-panel">' +
+        '<canvas id="pm-spark-' + safePmId(m.marketId) + '" width="192" height="96"></canvas>' +
+      '</div>' +
+    '</div>' +
+    '<div class="pm-card-footer">' +
+      '<span>' +
+        '<span class="pm-vol-val">' + fmtVol(m.volume24hr) + '</span>' +
+        '<span class="pm-vol-label"> Vol 24h</span>' +
+        '  <span class="pm-vol-val">' + fmtVol(m.liquidity) + '</span>' +
+        '<span class="pm-vol-label"> Liq</span>' +
+      '</span>' +
+      '<span class="pm-source">' +
+        '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>' +
+        'Polymarket' +
+      '</span>' +
+    '</div>';
+
+  card.onclick = function() { openPmModal(m); };
+  return card;
+}
+
+/**
+ * 計算各 outcome 在指定小時數內的機率變化
+ * @returns {number[]} 每個 outcome 的機率差值（正 = 上升）
+ */
+function computeOutcomeChanges(snapshots, outcomes, hours) {
+  if (!snapshots || snapshots.length < 2 || !outcomes || !outcomes.length) return [];
+  var cutoff = new Date();
+  cutoff.setHours(cutoff.getHours() - hours);
+  var cutStr = cutoff.toISOString();
+  var first  = null;
+  for (var i = 0; i < snapshots.length; i++) {
+    if (snapshots[i].snapshotAt >= cutStr) { first = snapshots[i]; break; }
+  }
+  if (!first) first = snapshots[0];
+  var last = snapshots[snapshots.length - 1];
+  try {
+    var fp = JSON.parse(first.outcomePrices);
+    var lp = JSON.parse(last.outcomePrices);
+    return outcomes.map(function(_, i) {
+      return (parseFloat(lp[i]) || 0) - (parseFloat(fp[i]) || 0);
+    });
+  } catch(e) { return []; }
+}
+
+/**
+ * 繪製 multi-line sparkline（每個 outcome 一條線）
+ */
+function drawPmSparkline(canvas, snapshots, outcomes) {
+  if (!snapshots || snapshots.length < 2) return;
+  var ctx = canvas.getContext('2d');
+  var w   = canvas.offsetWidth  || canvas.width;
+  var h   = canvas.offsetHeight || canvas.height;
+  canvas.width  = w;
+  canvas.height = h;
+  ctx.clearRect(0, 0, w, h);
+
+  var numOutcomes = outcomes ? outcomes.length : 1;
+  var isBinary    = numOutcomes === 2 &&
+    outcomes[0].toLowerCase() === 'yes' && outcomes[1].toLowerCase() === 'no';
+
+  // For binary, only draw Yes line
+  var drawCount = isBinary ? 1 : Math.min(numOutcomes, 6);
+
+  // Build series per outcome
+  var series = [];
+  for (var oi = 0; oi < drawCount; oi++) {
+    var vals = snapshots.map(function(s) {
+      try {
+        var prices = JSON.parse(s.outcomePrices);
+        return parseFloat(prices[oi]) || 0;
+      } catch(e) { return s.leadPrice || 0; }
+    });
+    series.push(vals);
+  }
+
+  // Global min/max for consistent y-axis
+  var allVals = [].concat.apply([], series);
+  var gMin = Math.min.apply(null, allVals);
+  var gMax = Math.max.apply(null, allVals);
+  var gRange = gMax - gMin || 0.02;
+
+  var pad = { t: 4, b: 4, l: 2, r: 2 };
+  var pw  = w - pad.l - pad.r;
+  var ph  = h - pad.t - pad.b;
+
+  series.forEach(function(vals, oi) {
+    ctx.save();
+    ctx.strokeStyle = PM_COLORS[oi % PM_COLORS.length];
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    vals.forEach(function(v, i) {
+      var x = pad.l + (i / (vals.length - 1)) * pw;
+      var y = pad.t + ph - ((v - gMin) / gRange) * ph;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
+// ─── PM Modal ─────────────────────────────────────
+
+function openPmModal(m) {
+  _pmActiveMarket = m;
+  _pmActiveDays   = 1;
+  document.querySelectorAll('[data-pm-days]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.pmDays === '1');
+  });
+  renderPmModal(m);
+  document.getElementById('pm-modal-overlay').classList.add('open');
+}
+
+function setPmRange(days) {
+  _pmActiveDays = days;
+  document.querySelectorAll('[data-pm-days]').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.pmDays == days);
+  });
+  if (_pmActiveMarket) renderPmModal(_pmActiveMarket);
+}
+
+function closePmModal(e) {
+  if (e && e.target !== document.getElementById('pm-modal-overlay')) return;
+  document.getElementById('pm-modal-overlay').classList.remove('open');
+  if (_pmChart) { _pmChart.destroy(); _pmChart = null; }
+  _pmActiveMarket = null;
+}
+
+function renderPmModal(m) {
+  // Header
+  document.getElementById('pm-modal-title').textContent = m.question;
+  document.getElementById('pm-modal-cat').textContent   = m.category || '';
+  var endEl = document.getElementById('pm-modal-end');
+  if (m.endDate) {
+    var diff = Math.ceil((new Date(m.endDate) - Date.now()) / 86400000);
+    endEl.textContent = '· Ends ' + m.endDate.substring(0, 10) + (diff >= 0 ? ' (' + diff + 'd)' : ' (ended)');
+  }
+  var linkEl = document.getElementById('pm-modal-link');
+  linkEl.href = 'https://polymarket.com/event/' + m.slug;
+
+  // Stats bar (4 cells)
+  function fmtVol(v) {
+    if (!v) return '$0';
+    if (v >= 1e6) return '$' + (v / 1e6).toFixed(2) + 'M';
+    if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+    return '$' + (v || 0).toFixed(0);
+  }
+  document.getElementById('pm-modal-stats').innerHTML =
+    pmStatCell('Total Volume', fmtVol(m.volume)) +
+    pmStatCell('Volume 24h',   fmtVol(m.volume24hr)) +
+    pmStatCell('Liquidity',    fmtVol(m.liquidity)) +
+    pmStatCell('Status', m.trackingStatus === 'completed' ?
+      '<span class="pm-resolved-badge">' + esc(m.resolvedOutcome || 'Resolved') + '</span>' :
+      '<span style="color:var(--green)">Active</span>');
+
+  // Filter snapshots by selected range
+  var snapshots = m.recentSnapshots || [];
+  if (_pmActiveDays > 0) {
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - _pmActiveDays);
+    var cutStr = cutoff.toISOString();
+    snapshots = snapshots.filter(function(s) { return s.snapshotAt >= cutStr; });
+  }
+
+  // Chart
+  var canvas = document.getElementById('pm-hist-chart');
+  if (_pmChart) { _pmChart.destroy(); _pmChart = null; }
+
+  if (snapshots.length > 1) {
+    var labels = snapshots.map(function(s) {
+      var d = new Date(s.snapshotAt);
+      return d.toLocaleDateString([], {month:'short',day:'numeric'}) + ' ' +
+             d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    });
+
+    var outcomes = m.outcomes || [];
+    var isBinary = m.outcomeType === 'binary';
+    var drawCount = isBinary ? 1 : Math.min(outcomes.length, 6);
+    var datasets  = [];
+
+    for (var oi = 0; oi < drawCount; oi++) {
+      var oidx = oi; // closure
+      var vals  = snapshots.map(function(s) {
+        try {
+          var prices = JSON.parse(s.outcomePrices);
+          return Math.round((parseFloat(prices[oidx]) || 0) * 1000) / 10; // % with 1 decimal
+        } catch(e) { return null; }
+      });
+      var color = PM_COLORS[oi % PM_COLORS.length];
+      datasets.push({
+        label:            isBinary ? 'Yes' : String(outcomes[oi] || ('Outcome ' + (oi+1))),
+        data:             vals,
+        borderColor:      color,
+        backgroundColor:  isBinary ? 'rgba(34,197,94,0.06)' : 'transparent',
+        borderWidth:      1.5,
+        pointRadius:      snapshots.length > 80 ? 0 : 2,
+        pointHoverRadius: 5,
+        pointBackgroundColor: color,
+        fill:             isBinary && oi === 0,
+        tension:          0.15,
+        spanGaps:         true
+      });
+    }
+
+    _pmChart = new Chart(canvas, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            display: !isBinary,
+            labels: { color: '#b0bccf', boxWidth: 10, font: { size: 11 } }
+          },
+          tooltip: {
+            backgroundColor: '#161b22',
+            borderColor: '#252836',
+            borderWidth: 1,
+            titleColor: '#b0bccf',
+            bodyColor: '#f0f3f8',
+            callbacks: {
+              label: function(ctx) {
+                var v = ctx.parsed.y;
+                if (v === null || v === undefined) return '';
+                return ' ' + ctx.dataset.label + ': ' + v.toFixed(1) + '%';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(255,255,255,.04)' },
+            ticks: { color: '#8892a4', maxTicksLimit: 8, maxRotation: 0 }
+          },
+          y: {
+            min: 0, max: 100,
+            grid: { color: 'rgba(255,255,255,.04)' },
+            ticks: { color: '#8892a4', callback: function(v) { return v + '%'; } }
+          }
+        }
+      }
+    });
+  } else {
+    // 清空 canvas
+    var ctx2 = canvas.getContext('2d');
+    ctx2.clearRect(0, 0, canvas.width, canvas.height);
+    ctx2.fillStyle = '#6b7a92';
+    ctx2.font = '13px -apple-system,sans-serif';
+    ctx2.textAlign = 'center';
+    ctx2.fillText('Not enough snapshot data yet', canvas.width / 2, canvas.height / 2);
+  }
+
+  // Outcomes table
+  var outcomes = m.outcomes || [];
+  var prices   = m.outcomePrices || [];
+  var changes24h = computeOutcomeChanges(m.recentSnapshots || [], outcomes, 24);
+
+  // Period change: first to last snapshot in selected range
+  var periodChanges = [];
+  if (snapshots.length >= 2) {
+    try {
+      var fp = JSON.parse(snapshots[0].outcomePrices);
+      var lp = JSON.parse(snapshots[snapshots.length - 1].outcomePrices);
+      periodChanges = outcomes.map(function(_, i) {
+        return (parseFloat(lp[i]) || 0) - (parseFloat(fp[i]) || 0);
+      });
+    } catch(e) {}
+  }
+
+  var tbody = document.getElementById('pm-outcomes-tbody');
+  tbody.innerHTML = '';
+  outcomes.forEach(function(name, i) {
+    var isLead = name === m.leadOutcome;
+    var pct    = Math.round((prices[i] || 0) * 1000) / 10;
+    var c24    = changes24h[i];
+    var cp     = periodChanges[i];
+
+    function fmtChg(chg) {
+      if (chg === undefined || chg === null) return '<span style="color:var(--t3)">—</span>';
+      var pp = Math.round(chg * 1000) / 10;
+      var col = pp > 0 ? 'var(--green)' : pp < 0 ? 'var(--red)' : 'var(--t3)';
+      return '<span style="color:' + col + '">' + (pp > 0 ? '+' : '') + pp.toFixed(1) + ' pp</span>';
+    }
+
+    var dot = '<span class="pm-dot" style="background:' + PM_COLORS[i % PM_COLORS.length] + '"></span>';
+    var tr  = document.createElement('tr');
+    if (isLead) tr.className = 'lead';
+    tr.innerHTML =
+      '<td>' + dot + ' ' + esc(String(name)) + '</td>' +
+      '<td style="font-variant-numeric:tabular-nums">' + pct.toFixed(1) + '%</td>' +
+      '<td>' + fmtChg(cp) + '</td>' +
+      '<td>' + fmtChg(c24) + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function pmStatCell(label, val) {
+  return '<div class="stat-cell">' +
+    '<div class="stat-label">' + esc(label) + '</div>' +
+    '<div class="stat-val">' + val + '</div>' +
+    '</div>';
+}
 
 // ═══════════════════════════════════════════════════
 // UTILS
@@ -1138,6 +1747,14 @@ function loadAll(){
         '<div style="color:var(--t2);padding:16px;font-size:.83em">'+esc(e.message)+'</div>';
     })
     .getHoldingsForDashboard();
+
+  google.script.run
+    .withSuccessHandler(renderPolymarkets)
+    .withFailureHandler(function(e){
+      document.getElementById('pm-wrap').innerHTML=
+        '<div style="color:var(--t2);padding:16px;font-size:.83em">Prediction markets unavailable: '+esc(e.message)+'</div>';
+    })
+    .getPolymarketsForDashboard();
 }
 
 loadAll();

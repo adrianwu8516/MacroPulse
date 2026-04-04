@@ -29,6 +29,12 @@ function setupAllTriggers() {
     .nearMinute(30)
     .create();
 
+  // 每 1 小時抓取 Polymarket 預測市場數據
+  ScriptApp.newTrigger('fetchPolymarketData')
+    .timeBased()
+    .everyHours(1)
+    .create();
+
   Logger.log('All triggers set up successfully');
   log_('Setup', 'All triggers configured');
 }
@@ -322,6 +328,14 @@ function initializeSheets() {
     logSheet.getRange(1, 1, 1, 3).setValues([
       ['timestamp', 'module', 'message']
     ]);
+  }
+
+  // Polymarket sheets（需先在 Script Properties 設定 POLYMARKET_SS_ID）
+  try {
+    initPolymarketSheets();
+  } catch (e) {
+    log_('Setup', 'initPolymarketSheets skipped: ' + e.message);
+    Logger.log('initPolymarketSheets skipped: ' + e.message);
   }
 
   log_('Setup', 'All sheets initialized');

@@ -34,4 +34,14 @@ var CONFIG = {
 
   // X API v2
   X_BASE_URL: 'https://api.x.com/2',
+
+  // Polymarket Gamma API（公開，無需 Auth）
+  POLYMARKET_BASE_URL: 'https://gamma-api.polymarket.com',
+  getPolymarketSSId: function() { return PROPS_.getProperty('POLYMARKET_SS_ID') || ''; },
+
+  // Polymarket Spreadsheet Sheet 名稱
+  PM_SHEET_MARKETS:       'Markets',
+  PM_SHEET_PRICE_HISTORY: 'PriceHistory',
+  PM_SHEET_TOP_MARKETS:   'TopMarkets',
+  PM_SHEET_LOG:           'Log',
 };

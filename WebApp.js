@@ -226,3 +226,115 @@ function getIndicatorHistory(id) {
 function getWebAppUrl() {
   return ScriptApp.getService().getUrl();
 }
+
+/**
+ * Polymarket 儀表板資料端點（google.script.run 呼叫，無需 token）
+ *
+ * 回傳結構：
+ * {
+ *   markets: [{
+ *     marketId, question, category, tags, slug, outcomeType,
+ *     outcomes: string[],        // 結果名稱陣列
+ *     outcomePrices: number[],   // 對應機率（0–1）
+ *     leadOutcome, leadPrice,
+ *     volume, volume24hr, liquidity,
+ *     endDate, trackingStatus, resolvedOutcome,
+ *     recentSnapshots: [{        // 最近快照（供前端繪圖用）
+ *       snapshotAt: string,      // ISO timestamp
+ *       leadPrice: number,
+ *       outcomePrices: string    // 完整 JSON，供 multi-line chart
+ *     }]
+ *   }],
+ *   fetchedAt: string
+ * }
+ */
+function getPolymarketsForDashboard() {
+  try {
+    var ss = getPolymarketSS_();
+
+    // ── 讀取 Markets sheet ───────────────────────────
+    var mSheet = ss.getSheetByName(CONFIG.PM_SHEET_MARKETS);
+    if (!mSheet) return { markets: [], fetchedAt: new Date().toISOString() };
+
+    var mData = mSheet.getDataRange().getValues();
+    if (mData.length < 2) return { markets: [], fetchedAt: new Date().toISOString() };
+
+    var mHeaders = mData[0];
+    var activeMarkets = [];
+    for (var i = 1; i < mData.length; i++) {
+      var row = {};
+      mHeaders.forEach(function(h, j) { row[h] = mData[i][j]; });
+      if (String(row.trackingStatus) === 'active') activeMarkets.push(row);
+    }
+
+    // 依 volume24hr 降序排列
+    activeMarkets.sort(function(a, b) {
+      return (parseFloat(b.volume24hr) || 0) - (parseFloat(a.volume24hr) || 0);
+    });
+
+    // ── 讀取 PriceHistory（只取最後 N 行，避免全表掃描）──
+    var snapshotsMap = {}; // marketId → [{snapshotAt, leadPrice, outcomePrices}]
+    var phSheet = ss.getSheetByName(CONFIG.PM_SHEET_PRICE_HISTORY);
+    if (phSheet) {
+      var totalRows    = phSheet.getLastRow();
+      var maxToRead    = Math.max(activeMarkets.length * 48, 600); // 最多 48 個快照/市場
+      var startRow     = Math.max(2, totalRows - maxToRead + 1);   // 從第 2 行起（略過 header）
+      var numRows      = totalRows - startRow + 1;
+
+      if (numRows > 0) {
+        var phData = phSheet.getRange(startRow, 1, numRows, 7).getValues();
+        // 欄位順序固定：snapshotAt, marketId, volume, volume24hr, liquidity, outcomePrices, leadPrice
+        phData.forEach(function(r) {
+          var mId = String(r[1]);
+          if (!snapshotsMap[mId]) snapshotsMap[mId] = [];
+          snapshotsMap[mId].push({
+            snapshotAt:    String(r[0]),
+            leadPrice:     parseFloat(r[6]) || 0,
+            outcomePrices: String(r[5] || '')
+          });
+        });
+        // 每個市場只保留最後 48 個快照
+        Object.keys(snapshotsMap).forEach(function(id) {
+          if (snapshotsMap[id].length > 48) {
+            snapshotsMap[id] = snapshotsMap[id].slice(-48);
+          }
+        });
+      }
+    }
+
+    // ── 組裝回傳資料 ─────────────────────────────────
+    var result = activeMarkets.map(function(m) {
+      var outcomesArr = [];
+      var pricesArr   = [];
+      try { outcomesArr = JSON.parse(String(m.outcomes)); }   catch(e) {}
+      try { pricesArr   = JSON.parse(String(m.outcomePrices))
+                            .map(function(p) { return parseFloat(p) || 0; }); } catch(e) {}
+
+      return {
+        marketId:       String(m.marketId),
+        question:       String(m.question),
+        category:       String(m.category || ''),
+        tags:           String(m.tags || ''),
+        slug:           String(m.slug || ''),
+        outcomeType:    String(m.outcomeType || 'binary'),
+        outcomes:       outcomesArr,
+        outcomePrices:  pricesArr,
+        leadOutcome:    String(m.leadOutcome || ''),
+        leadPrice:      parseFloat(m.leadPrice) || 0,
+        volume:         parseFloat(m.volume)     || 0,
+        volume24hr:     parseFloat(m.volume24hr) || 0,
+        liquidity:      parseFloat(m.liquidity)  || 0,
+        endDate:        String(m.endDate || ''),
+        trackingStatus: String(m.trackingStatus || ''),
+        resolvedOutcome:String(m.resolvedOutcome || ''),
+        recentSnapshots: snapshotsMap[String(m.marketId)] || []
+      };
+    });
+
+    return { markets: result, fetchedAt: new Date().toISOString() };
+
+  } catch (e) {
+    Logger.log('getPolymarketsForDashboard error: ' + e.message);
+    throw new Error('Polymarket data unavailable: ' + e.message);
+  }
+}
