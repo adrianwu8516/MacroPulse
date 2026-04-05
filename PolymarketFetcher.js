@@ -182,23 +182,24 @@ function normalizeMarket_(m) {
   var clobTokenIds = toJsonStr(m.clobTokenIds, '[]');
 
   return {
-    id:           String(m.id || ''),
-    conditionId:  String(m.conditionId || ''),
-    slug:         String(m.slug || ''),
-    question:     String(m.question || '').trim(),
-    category:     tags.length > 0 ? tags[0] : (m.category || ''),
-    tags:         tags.join(','),
-    clobTokenIds: clobTokenIds,
-    outcomes:     toJsonStr(m.outcomes, '["Yes","No"]'),
-    outcomePrices:toJsonStr(m.outcomePrices, '["0.5","0.5"]'),
-    startDate:    String(m.startDate || ''),
-    endDate:      String(m.endDate   || ''),
-    volume:       parseFloat(m.volume)     || 0,
-    volume24hr:   parseFloat(m.volume24hr) || 0,
-    liquidity:    parseFloat(m.liquidity)  || 0,
-    active:       m.active   === true || m.active   === 'true',
-    closed:       m.closed   === true || m.closed   === 'true',
-    resolved:     m.resolved === true || m.resolved === 'true'
+    id:               String(m.id || ''),
+    conditionId:      String(m.conditionId || ''),
+    slug:             String(m.slug || ''),
+    question:         String(m.question || '').trim(),
+    category:         tags.length > 0 ? tags[0] : (m.category || ''),
+    tags:             tags.join(','),
+    clobTokenIds:     clobTokenIds,
+    outcomes:         toJsonStr(m.outcomes, '["Yes","No"]'),
+    outcomePrices:    toJsonStr(m.outcomePrices, '["0.5","0.5"]'),
+    startDate:        String(m.startDate || ''),
+    endDate:          String(m.endDate   || ''),
+    volume:           parseFloat(m.volume)     || 0,
+    volume24hr:       parseFloat(m.volume24hr) || 0,
+    liquidity:        parseFloat(m.liquidity)  || 0,
+    active:           m.active   === true || m.active   === 'true',
+    closed:           m.closed   === true || m.closed   === 'true',
+    resolved:         m.resolved === true || m.resolved === 'true',
+    resolvedOutcome:  String(m.resolvedOutcome || '')  // capture API field if present
   };
 }
 
@@ -373,6 +374,20 @@ function polyUpdateMarket_(sheet, headers, rowIndex, m, now) {
   var lead        = calcLeadOutcome_(m.outcomes, m.outcomePrices);
   var isCompleted = m.resolved || m.closed;
 
+  // resolvedOutcome 判斷邏輯：
+  //   1. API 直接提供 → 優先使用
+  //   2. 市場剛結算且 prices 非零 → 用 leadOutcome（結算前最後有效快照）
+  //   3. 市場已結算但 prices 歸零 → 保留 sheet 中舊值（避免蓋掉正確歷史）
+  var existingResolved = String(currentRow[headers.indexOf('resolvedOutcome')] || '');
+  var resolvedOutcome;
+  if (m.resolvedOutcome) {
+    resolvedOutcome = m.resolvedOutcome;           // API 提供
+  } else if (isCompleted && lead.price > 0) {
+    resolvedOutcome = lead.outcome;                // 結算前最後有效 lead
+  } else {
+    resolvedOutcome = existingResolved;            // prices 已歸零，保留舊值
+  }
+
   var updates = {
     'volume':          m.volume,
     'volume24hr':      m.volume24hr,
@@ -383,7 +398,7 @@ function polyUpdateMarket_(sheet, headers, rowIndex, m, now) {
     'active':          m.active,
     'closed':          m.closed,
     'resolved':        m.resolved,
-    'resolvedOutcome': isCompleted ? lead.outcome : (currentRow[headers.indexOf('resolvedOutcome')] || ''),
+    'resolvedOutcome': resolvedOutcome,
     'trackingStatus':  isCompleted ? 'completed' : 'active',
     'lastUpdatedAt':   now
   };
