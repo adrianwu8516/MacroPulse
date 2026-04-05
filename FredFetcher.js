@@ -62,6 +62,23 @@ function fredRecentTwo_(seriesId) {
 }
 
 /**
+ * 取得最近三個有效值（用於計算當期與前期成長率）
+ */
+function fredRecentThree_(seriesId) {
+  var obs = fetchFredSeries_(seriesId, 30);
+  var values = [];
+  for (var i = 0; i < obs.length; i++) {
+    var val = parseFloat(obs[i].value);
+    if (!isNaN(val)) {
+      values.push(val);
+      if (values.length === 3) break;
+    }
+  }
+  if (values.length < 3) throw new Error('Not enough data (need 3) for ' + seriesId);
+  return { current: values[0], previous: values[1], prevPrev: values[2] };
+}
+
+/**
  * 主要入口：抓取所有 FRED 數據，寫入 Indicators sheet
  */
 function fetchAllFredData() {
@@ -128,15 +145,15 @@ function fetchAllFredData() {
 
   // 4. CPI（月度數據，計算年化通膨率）
   try {
-    var cpi = fredRecentTwo_('CPIAUCSL');
-    var monthlyChange = (cpi.current - cpi.previous) / cpi.previous * 100;
-    var annualized = monthlyChange * 12;
+    var cpi = fredRecentThree_('CPIAUCSL');
+    var annualized     = (cpi.current  - cpi.previous) / cpi.previous  * 100 * 12;
+    var prevAnnualized = (cpi.previous - cpi.prevPrev) / cpi.prevPrev  * 100 * 12;
     results.push({
       id: 'CPI',
       name: 'CPI 通胀率',
       category: 'economy',
       rawValue: annualized,
-      previousValue: cpi.previous,  // 保留原始 CPI 值供參考
+      previousValue: prevAnnualized,  // 前一個月的年化通膨率（可比較）
       displayValue: annualized.toFixed(1) + '%',
       timestamp: timestamp
     });
@@ -181,14 +198,15 @@ function fetchAllFredData() {
 
   // 7. GDP（季度數據，計算季度年化成長率）
   try {
-    var gdp = fredRecentTwo_('GDP');
-    var growth = (gdp.current - gdp.previous) / gdp.previous * 100 * 4;  // 季度年化
+    var gdp = fredRecentThree_('GDP');
+    var growth     = (gdp.current  - gdp.previous) / gdp.previous * 100 * 4;  // 季度年化
+    var prevGrowth = (gdp.previous - gdp.prevPrev) / gdp.prevPrev * 100 * 4;  // 前季年化
     results.push({
       id: 'GDP',
       name: 'GDP 增长率',
       category: 'economy',
       rawValue: growth,
-      previousValue: gdp.previous,
+      previousValue: prevGrowth,  // 前一季的年化成長率（可比較）
       displayValue: growth.toFixed(1) + '%',
       timestamp: timestamp
     });

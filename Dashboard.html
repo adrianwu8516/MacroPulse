@@ -850,7 +850,7 @@ function renderIndicators(result) {
     var cc=s>0?'bg-g':s<0?(s<-1?'bg-r':'bg-o'):'bg-y';
     var vc=s>0?'c-g':s<0?(s<-1?'c-r':'c-o'):'c-y';
     var chg='';
-    if(ind.previousValue!==null){
+    if(ind.previousValue!==null&&isFinite(ind.previousValue)){
       var d=ind.rawValue-ind.previousValue;
       chg='<span class="metric-chg '+(d>0?'c-g':d<0?'c-r':'')+'">'+
         (d>0?'▲':d<0?'▼':'—')+Math.abs(d).toFixed(2)+'</span>';
@@ -881,38 +881,42 @@ function renderIndicators(result) {
   var grid = document.getElementById('ind-grid');
   grid.innerHTML = '';
   rest.forEach(function(ind){
-    var cfg=CFG[ind.id];
-    if(!cfg||ind.rawValue===null) return;
-    var s=cfg.score(ind.rawValue);
-    var cc=s>0?'c-g':s<0?(s<-1?'c-r':'c-o'):'c-y';
-    var bl=s>0?'Bullish':s<0?(s<-1?'Bearish':'Caution'):'Neutral';
+    try {
+      var cfg=CFG[ind.id];
+      if(!cfg||ind.rawValue===null||!isFinite(ind.rawValue)) return;
+      var s=cfg.score(ind.rawValue);
+      var cc=s>0?'c-g':s<0?(s<-1?'c-r':'c-o'):'c-y';
+      var bl=s>0?'Bullish':s<0?(s<-1?'Bearish':'Caution'):'Neutral';
 
-    var chgHtml='';
-    if(ind.previousValue!==null){
-      var d=ind.rawValue-ind.previousValue;
-      var ac=d>0?'c-g':d<0?'c-r':'';
-      var ar=d>0?'▲':d<0?'▼':'—';
-      chgHtml='<span class="'+ac+'">'+ar+'</span> prev '+ind.previousValue.toFixed(2)+
-        ' <span style="opacity:.5">('+( d>=0?'+':'' )+d.toFixed(2)+')</span>';
+      var chgHtml='';
+      if(ind.previousValue!==null&&isFinite(ind.previousValue)){
+        var d=ind.rawValue-ind.previousValue;
+        var ac=d>0?'c-g':d<0?'c-r':'';
+        var ar=d>0?'▲':d<0?'▼':'—';
+        chgHtml='<span class="'+ac+'">'+ar+'</span> prev '+ind.previousValue.toFixed(2)+
+          ' <span style="opacity:.5">('+( d>=0?'+':'' )+d.toFixed(2)+')</span>';
+      }
+
+      var card=document.createElement('div');
+      card.className='ind-card '+cc;
+      card.title='Click to view history';
+      var _id = ind.id;
+      card.onclick = function(){ openHistory(_id); };
+      card.innerHTML=
+        '<div class="ind-head">'+
+          '<span class="ind-name">'+esc(cfg.name)+'</span>'+
+          '<span class="ind-badge '+cc+'">'+bl+'</span>'+
+        '</div>'+
+        '<div class="ind-val '+cc+'">'+ind.rawValue.toFixed(2)+
+          (cfg.unit?'<span class="ind-unit">'+esc(cfg.unit)+'</span>':'')+
+        '</div>'+
+        '<div class="ind-change">'+(chgHtml||'&nbsp;')+'</div>'+
+        '<div class="bar-track"><div class="bar-fill '+cc+'" style="width:'+cfg.bar(ind.rawValue)+'%"></div></div>'+
+        '<div class="ind-hint">'+esc(cfg.hint(ind.rawValue))+'</div>';
+      grid.appendChild(card);
+    } catch(e) {
+      console.error('[MacroPulse] indicator card error for', ind.id, ':', e.message, e);
     }
-
-    var card=document.createElement('div');
-    card.className='ind-card '+cc;
-    card.title='Click to view history';
-    var _id = ind.id;
-    card.onclick = function(){ openHistory(_id); };
-    card.innerHTML=
-      '<div class="ind-head">'+
-        '<span class="ind-name">'+esc(cfg.name)+'</span>'+
-        '<span class="ind-badge '+cc+'">'+bl+'</span>'+
-      '</div>'+
-      '<div class="ind-val '+cc+'">'+ind.rawValue.toFixed(2)+
-        (cfg.unit?'<span class="ind-unit">'+esc(cfg.unit)+'</span>':'')+
-      '</div>'+
-      '<div class="ind-change">'+(chgHtml||'&nbsp;')+'</div>'+
-      '<div class="bar-track"><div class="bar-fill '+cc+'" style="width:'+cfg.bar(ind.rawValue)+'%"></div></div>'+
-      '<div class="ind-hint">'+esc(cfg.hint(ind.rawValue))+'</div>';
-    grid.appendChild(card);
   });
 
   // SP500
@@ -927,8 +931,8 @@ function renderIndicators(result) {
 // ═══════════════════════════════════════════════════
 function renderSP500(sp) {
   var wrap=document.getElementById('sp500-wrap');
-  if(!sp||sp.rawValue===null){
-    wrap.innerHTML='<div style="color:var(--t2);padding:16px;font-size:.85em">No SPY data available</div>';
+  if(!sp||sp.rawValue===null||!isFinite(sp.rawValue)){
+    wrap.innerHTML='<div style="color:var(--t2);padding:16px;font-size:.85em">SPY data unavailable — check ALPHA_VANTAGE_KEY in Script Properties, then run <code style="background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px">fetchAllSentimentData()</code>.</div>';
     return;
   }
   var price=sp.rawValue, sma=sp.previousValue;
@@ -957,7 +961,7 @@ function renderSP500(sp) {
       '</div>'+
       '<div class="sp-legend"><span>Underperforming</span><span>Outperforming</span></div>'+
       '<div class="sp-status">'+
-        '<span style="color:'+(above?'var(--green)':'var(--red))') + ';font-weight:600">'+
+        '<span style="color:'+(above?'var(--green)':'var(--red)')+';font-weight:600">'+
           (above?'▲ Above':'▼ Below')+' SMA200</span>'+
         (pct!==null?' — '+'<span style="font-weight:600;color:'+(above?'var(--green)':'var(--red)')+'">'+(pct>=0?'+':'')+pct.toFixed(2)+'%</span>':'') +
       '</div>';

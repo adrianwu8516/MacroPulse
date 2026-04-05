@@ -142,8 +142,10 @@ function handleStatus_() {
 function getIndicatorsForDashboard() {
   var data = readSheet_(CONFIG.SHEET_INDICATORS);
   data.forEach(function(row) {
-    row.rawValue      = row.rawValue      !== '' ? parseFloat(row.rawValue)      || null : null;
-    row.previousValue = row.previousValue !== '' ? parseFloat(row.previousValue) || null : null;
+    var rv = parseFloat(row.rawValue);
+    row.rawValue = isFinite(rv) ? rv : null;
+    var pv = parseFloat(row.previousValue);
+    row.previousValue = isFinite(pv) ? pv : null;
   });
   return { indicators: data };
 }
