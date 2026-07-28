@@ -7,7 +7,7 @@ struct MacroPulseApp: App {
     @StateObject private var socialFeedManager = SocialFeedManager()
 
     init() {
-        // 设置 Dock 图标（swift run 不走 .app bundle，需手动设置）
+        // swift run 不走 .app bundle，需手动设置 Dock 图标
         if let iconURL = Bundle.module.url(forResource: "AppIcon", withExtension: "icns"),
            let icon = NSImage(contentsOf: iconURL) {
             NSApplication.shared.applicationIconImage = icon
